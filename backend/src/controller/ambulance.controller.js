@@ -4,7 +4,9 @@ const hospitalModel = require('../models/hospital.model')
 const axios = require('axios')
 const { getIO } = require('../socket')
 const {
+  buildFallbackPrediction,
   buildIncidentRealtimePayload,
+  canHospitalStabilize,
   determineSeverity,
   findClosestStabilizationHospital,
   getAvailableHospitals,
@@ -55,7 +57,7 @@ async function getPendingIncidents(req, res) {
 
 async function getActiveIncident(req, res) {
   try {
-    const incident = await incidentModel
+    const activeIncident = await incidentModel
       .findOne({
         assignedAmbulance: req.user.id,
         status: { $ne: 'completed' },
@@ -66,8 +68,20 @@ async function getActiveIncident(req, res) {
       .populate('selectedHospital', 'name email location inventory status')
       .populate('hospitalOptions.hospital', 'name email location inventory status')
 
+    const recentIncidents = await incidentModel
+      .find({
+        assignedAmbulance: req.user.id,
+      })
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .populate('assignedAmbulance', 'vehicleNumber type status location')
+      .populate('assignedHospital', 'name email location inventory status')
+      .populate('selectedHospital', 'name email location inventory status')
+      .populate('hospitalOptions.hospital', 'name email location inventory status')
+
     res.status(200).json({
-      incident: incident ? buildIncidentRealtimePayload(incident) : null,
+      incident: activeIncident ? buildIncidentRealtimePayload(activeIncident) : null,
+      recentIncidents: recentIncidents.map((incident) => buildIncidentRealtimePayload(incident)),
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -153,13 +167,8 @@ async function predictAllocation(req, res) {
       const response = await axios.post('http://127.0.0.1:8000/predict', vitals)
       mlPrediction = response.data
     } catch (mlErr) {
-      console.error('ML Service failed, using fallback allocation', mlErr.message)
-      mlPrediction = {
-        icuBeds_Required: 0,
-        ventilators_Required: 0,
-        generalBeds_Required: 1,
-        specialists_Needed: ['general'],
-      }
+      console.warn('ML Service unavailable, using local triage engine:', mlErr.message)
+      mlPrediction = buildFallbackPrediction(vitals)
     }
 
     const allHospitals = await getAvailableHospitals()
@@ -298,10 +307,19 @@ async function streamVitals(req, res) {
     let rerouteReason = ''
     let previousHospitalId = incident.assignedHospital ? String(incident.assignedHospital) : null
 
-    if (incident.severityLevel === 'critical') {
+    const currentHospital = incident.assignedHospital
+      ? await hospitalModel.findById(incident.assignedHospital)
+      : null
+
+    const currentHospitalCanStabilize = currentHospital
+      ? canHospitalStabilize(currentHospital, incident.severityLevel)
+      : false
+
+    if (incident.severityLevel === 'critical' && !currentHospitalCanStabilize) {
       const stabilizationHospital = await findClosestStabilizationHospital(
         incident,
         incident.assignedHospital,
+        incident.severityLevel,
       )
 
       if (

@@ -14,5 +14,6 @@ router.post(
     upload.single('image'),
     incidentController.reportIncident
 )
+router.get('/history', authMiddleware, incidentController.getCitizenHistory)
 
 module.exports = router 

@@ -16,7 +16,7 @@ import {
   Route,
   Stethoscope,
 } from 'lucide-react'
-import { DirectionsRenderer, GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api'
+import { DirectionsRenderer, GoogleMap, Marker, Polyline, useJsApiLoader } from '@react-google-maps/api'
 
 const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '1rem' }
 
@@ -34,15 +34,15 @@ function clamp(value, min, max) {
 }
 
 function buildRandomVitals(currentVitals, severityLevel) {
-  const trend = severityLevel === 'critical' ? -1 : 1
+  const trend = severityLevel === 'critical' ? -1 : severityLevel === 'watch' ? 0 : 1
 
   return {
     ...currentVitals,
-    heartRate: clamp(Number(currentVitals.heartRate) + Math.round((Math.random() - 0.35) * 12), 42, 155),
-    systolicBP: clamp(Number(currentVitals.systolicBP) + Math.round((Math.random() - (trend > 0 ? 0.45 : 0.6)) * 10), 78, 145),
-    diastolicBP: clamp(Number(currentVitals.diastolicBP) + Math.round((Math.random() - (trend > 0 ? 0.45 : 0.6)) * 8), 48, 98),
-    spo2: clamp(Number(currentVitals.spo2) + Math.round((Math.random() - (trend > 0 ? 0.52 : 0.7)) * 4), 84, 100),
-    temperature: Number(clamp(Number(currentVitals.temperature) + (Math.random() - 0.45) * 0.5, 97, 103.5).toFixed(1)),
+    heartRate: clamp(Number(currentVitals.heartRate) + Math.round((Math.random() - (trend > 0 ? 0.5 : trend < 0 ? 0.3 : 0.45)) * 6), 48, 145),
+    systolicBP: clamp(Number(currentVitals.systolicBP) + Math.round((Math.random() - (trend > 0 ? 0.5 : trend < 0 ? 0.3 : 0.45)) * 6), 86, 140),
+    diastolicBP: clamp(Number(currentVitals.diastolicBP) + Math.round((Math.random() - (trend > 0 ? 0.5 : trend < 0 ? 0.3 : 0.45)) * 4), 56, 95),
+    spo2: clamp(Number(currentVitals.spo2) + Math.round((Math.random() - (trend > 0 ? 0.5 : trend < 0 ? 0.3 : 0.45)) * 2), 90, 100),
+    temperature: Number(clamp(Number(currentVitals.temperature) + (Math.random() - 0.48) * 0.2, 97.4, 101.5).toFixed(1)),
   }
 }
 
@@ -79,11 +79,14 @@ export default function AmbulanceDashboardLive() {
   const [streaming, setStreaming] = useState(false)
   const [routeAlert, setRouteAlert] = useState('')
   const [activeRoute, setActiveRoute] = useState(null)
+  const [recentIncidents, setRecentIncidents] = useState([])
   const [ambulanceLocation, setAmbulanceLocation] = useState(user?.location || null)
+  const [mapError, setMapError] = useState('')
   const vitalsRef = useRef(initialVitals)
   const activeIncidentRef = useRef(null)
+  const ambulanceLocationRef = useRef(user?.location || null)
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: 'AIzaSyCR7LdvZDlkYsjANjULsrQXn7iOw46oH1Q',
   })
@@ -104,6 +107,10 @@ export default function AmbulanceDashboardLive() {
   }, [vitals])
 
   useEffect(() => {
+    ambulanceLocationRef.current = ambulanceLocation
+  }, [ambulanceLocation])
+
+  useEffect(() => {
     const hydrate = async () => {
       try {
         const [pendingRes, activeRes] = await Promise.all([
@@ -112,6 +119,7 @@ export default function AmbulanceDashboardLive() {
         ])
 
         setIncidents(pendingRes.data.incidents || [])
+        setRecentIncidents(activeRes.data.recentIncidents || [])
 
         if (activeRes.data.incident) {
           const currentIncident = activeRes.data.incident
@@ -134,29 +142,39 @@ export default function AmbulanceDashboardLive() {
   }, [API_URL])
 
   useEffect(() => {
-    if (!navigator.geolocation) return
+    if (!navigator.geolocation) return undefined
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const location = {
-          lat: Number(position.coords.latitude.toFixed(6)),
-          lng: Number(position.coords.longitude.toFixed(6)),
-        }
-        setAmbulanceLocation(location)
+    const syncLocation = async (position) => {
+      const location = {
+        lat: Number(position.coords.latitude.toFixed(6)),
+        lng: Number(position.coords.longitude.toFixed(6)),
+      }
 
-        try {
-          await axios.post(`${API_URL}/ambulance/location`, {
-            lat: location.lat,
-            lng: location.lng,
-            incidentId: activeIncidentRef.current?._id,
-          })
-        } catch (error) {
-          console.error('Initial location sync failed', error)
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
+      setAmbulanceLocation(location)
+
+      try {
+        await axios.post(`${API_URL}/ambulance/location`, {
+          lat: location.lat,
+          lng: location.lng,
+          incidentId: activeIncidentRef.current?._id,
+        })
+      } catch (error) {
+        console.error('Live location sync failed', error)
+      }
+    }
+
+    navigator.geolocation.getCurrentPosition(syncLocation, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+    })
+
+    const watchId = navigator.geolocation.watchPosition(syncLocation, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000,
+    })
+
+    return () => navigator.geolocation.clearWatch(watchId)
   }, [API_URL])
 
   useEffect(() => {
@@ -176,6 +194,10 @@ export default function AmbulanceDashboardLive() {
     socket.on('ambulance_case_update', ({ incident, rerouted, reason }) => {
       setActiveIncident(incident)
       setHospitalOptions(incident.hospitalOptions || [])
+      setRecentIncidents((prev) => [
+        incident,
+        ...prev.filter((item) => item._id !== incident._id),
+      ].slice(0, 10))
       const normalizedAssignedHospital = normalizeHospital(
         incident.assignedHospital || incident.selectedHospital,
         incident.hospitalOptions || [],
@@ -194,7 +216,15 @@ export default function AmbulanceDashboardLive() {
   }, [user.id])
 
   useEffect(() => {
-    if (!isLoaded || !window.google || !selectedHospital?.location) return
+    if (!selectedHospital?.location) {
+      setActiveRoute(null)
+      setMapError('')
+      return
+    }
+
+    if (!isLoaded || !window.google) return
+
+    setMapError('')
 
     const directionsService = new window.google.maps.DirectionsService()
     directionsService.route(
@@ -209,6 +239,10 @@ export default function AmbulanceDashboardLive() {
       (result, status) => {
         if (status === window.google.maps.DirectionsStatus.OK) {
           setActiveRoute(result)
+          setMapError('')
+        } else {
+          setActiveRoute(null)
+          setMapError(`Route unavailable: ${status}`)
         }
       },
     )
@@ -230,7 +264,7 @@ export default function AmbulanceDashboardLive() {
         const response = await axios.post(`${API_URL}/ambulance/stream-vitals`, {
           incidentId: activeIncidentRef.current._id,
           vitals: nextVitals,
-          ambulanceLocation: mapOrigin,
+          ambulanceLocation: ambulanceLocationRef.current || mapOrigin,
         })
 
         setActiveIncident(response.data.incident)
@@ -572,6 +606,16 @@ export default function AmbulanceDashboardLive() {
                   <h2 className="text-xl font-bold text-gray-900">Live Route</h2>
                 </div>
                 <div className="h-[420px] overflow-hidden rounded-2xl bg-gray-100">
+                  {loadError && (
+                    <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-red-600">
+                      Failed to load Google Maps.
+                    </div>
+                  )}
+                  {!loadError && !isLoaded && (
+                    <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-gray-500">
+                      Loading live map...
+                    </div>
+                  )}
                   {isLoaded && (
                     <GoogleMap mapContainerStyle={mapContainerStyle} center={mapOrigin} zoom={12} options={{ disableDefaultUI: true }}>
                       <Marker position={mapOrigin} label="A" />
@@ -582,18 +626,57 @@ export default function AmbulanceDashboardLive() {
                           options={{ polylineOptions: { strokeColor: '#dc2626', strokeWeight: 5 } }}
                         />
                       )}
+                      {!activeRoute && selectedHospital?.location && (
+                        <Polyline
+                          path={[mapOrigin, selectedHospital.location]}
+                          options={{ strokeColor: '#dc2626', strokeWeight: 4, strokeOpacity: 0.85 }}
+                        />
+                      )}
                     </GoogleMap>
                   )}
                 </div>
                 <div className="mt-4 rounded-2xl bg-gray-50 p-4">
                   <p className="text-sm font-bold text-gray-800">Current destination</p>
                   <p className="mt-1 text-sm text-gray-600">{selectedHospital ? `${selectedHospital.name} (${selectedHospital.status})` : 'No hospital selected yet'}</p>
+                  {mapError && <p className="mt-2 text-xs font-semibold text-amber-700">{mapError}</p>}
                   <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
                     <Navigation className="h-3.5 w-3.5" />
                     Route auto-updates when critical vitals trigger a reroute.
                   </p>
                 </div>
               </div>
+
+              {recentIncidents.length > 0 && (
+                <div>
+                  <div className="mb-4 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-blue-500" />
+                    <h3 className="text-lg font-bold text-gray-900">Mission log</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {recentIncidents.map((incident) => (
+                      <div key={incident._id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-600">
+                            {incident.status}
+                          </span>
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-600">
+                            {incident.transportStatus}
+                          </span>
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-gray-600">
+                            {incident.arrivalStatus}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-gray-800">
+                          {incident.description || 'No incident description'}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-gray-500">
+                          Destination: {incident.assignedHospital?.name || incident.selectedHospital?.name || 'Not chosen'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         )}

@@ -63,6 +63,8 @@ async function reportIncident(req, res) {
     res.status(201).json({
       message: "Incident reported successfully",
       incident,
+      totalRewardPoints: user.totalRewardPoints,
+      rewardHistory: user.rewardHistory,
     });
   } catch (err) {
     console.error("REPORT INCIDENT ERROR:", err);
@@ -72,4 +74,30 @@ async function reportIncident(req, res) {
   }
 }
 
-module.exports = { reportIncident };
+async function getCitizenHistory(req, res) {
+  try {
+    const [citizen, reports] = await Promise.all([
+      citizenModel.findById(req.user.id).select('name totalRewardPoints rewardHistory'),
+      incidentModel
+        .find({ reportedBy: req.user.id })
+        .sort({ createdAt: -1 })
+        .populate('assignedAmbulance', 'vehicleNumber type')
+        .populate('assignedHospital', 'name status')
+        .populate('selectedHospital', 'name status'),
+    ])
+
+    if (!citizen) {
+      return res.status(404).json({ message: 'Citizen not found' })
+    }
+
+    res.status(200).json({
+      totalRewardPoints: citizen.totalRewardPoints,
+      rewardHistory: citizen.rewardHistory || [],
+      reports,
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+module.exports = { reportIncident, getCitizenHistory };

@@ -24,7 +24,6 @@ async function getDashboardCases(req, res) {
     const incidents = await incidentModel
       .find({
         assignedHospital: req.user.id,
-        status: { $ne: 'completed' },
       })
       .sort({ updatedAt: -1 })
       .populate('assignedAmbulance', 'vehicleNumber type status location')

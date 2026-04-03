@@ -58,6 +58,30 @@ function buildRequirementSummary(mlPrediction = {}) {
   }
 }
 
+function buildFallbackPrediction(vitals = {}) {
+  const heartRate = Number(vitals.heartRate || 0)
+  const systolicBP = Number(vitals.systolicBP || 0)
+  const spo2 = Number(vitals.spo2 || 0)
+  const symptoms = String(vitals.symptoms || '').toLowerCase()
+
+  const specialists = new Set(['general'])
+  if (/(chest|cardiac|heart)/.test(symptoms)) specialists.add('cardiac')
+  if (/(stroke|seizure|neuro|brain|head)/.test(symptoms)) specialists.add('neuro')
+  if (/(bleeding|fracture|trauma|injury)/.test(symptoms)) specialists.add('trauma')
+  if (/(breath|respiratory|oxygen|asthma)/.test(symptoms)) specialists.add('pulmonology')
+
+  const isCritical = spo2 < 90 || systolicBP < 90 || heartRate > 140 || heartRate < 45
+  const isHighRisk = spo2 < 94 || systolicBP < 100 || heartRate > 120 || heartRate < 55
+
+  return {
+    icuBeds_Required: isCritical ? 1 : 0,
+    ventilators_Required: spo2 < 88 ? 1 : 0,
+    generalBeds_Required: 1,
+    specialists_Needed: Array.from(specialists),
+    triageLevel: isCritical ? 'critical' : isHighRisk ? 'watch' : 'stable',
+  }
+}
+
 function buildHospitalOption(hospital, incidentLocation, requirements = {}) {
   const inventory = hospital.inventory || {}
   const distanceKm = getDistanceFromLatLonInKm(
@@ -110,12 +134,12 @@ async function rankHospitalsForIncident(incident, hospitals) {
     .filter((hospital) => hospital.status !== 'offline')
     .map((hospital) => buildHospitalOption(hospital, incident.location, requirements))
     .sort((a, b) => {
-      if (b.matchesAllRequirements !== a.matchesAllRequirements) {
-        return Number(b.matchesAllRequirements) - Number(a.matchesAllRequirements)
-      }
-
       if (b.capabilityScore !== a.capabilityScore) {
         return b.capabilityScore - a.capabilityScore
+      }
+
+      if (b.matchesAllRequirements !== a.matchesAllRequirements) {
+        return Number(b.matchesAllRequirements) - Number(a.matchesAllRequirements)
       }
 
       return a.distanceKm - b.distanceKm
@@ -128,7 +152,21 @@ async function getAvailableHospitals() {
   return hospitalModel.find({ status: { $ne: 'offline' } }).sort({ createdAt: 1 })
 }
 
-async function findClosestStabilizationHospital(incident, currentHospitalId) {
+function canHospitalStabilize(hospitalLike, severityLevel = 'stable') {
+  const hospital = hospitalLike.hospital || hospitalLike
+  const inventory = hospital.availableResources || hospital.inventory || {}
+  const status = hospital.status
+
+  if (status !== 'active') return false
+
+  if (severityLevel === 'critical') {
+    return (inventory.icuBeds || 0) > 0 || (inventory.ventilators || 0) > 0 || (inventory.generalBeds || 0) > 1
+  }
+
+  return (inventory.generalBeds || 0) > 0 || (inventory.icuBeds || 0) > 0
+}
+
+async function findClosestStabilizationHospital(incident, currentHospitalId, severityLevel = 'critical') {
   const hospitals = await hospitalModel.find({ status: 'active' })
   const candidates = hospitals
     .map((hospital) => buildHospitalOption(hospital, incident.ambulanceLocation || incident.location, {
@@ -137,7 +175,7 @@ async function findClosestStabilizationHospital(incident, currentHospitalId) {
       generalBeds: 1,
       specialists: ['general'],
     }))
-    .filter((option) => option.availableResources.generalBeds > 0 || option.availableResources.icuBeds > 0)
+    .filter((option) => canHospitalStabilize(option, severityLevel))
     .sort((a, b) => a.distanceKm - b.distanceKm)
 
   const currentHospitalIdString = currentHospitalId ? String(currentHospitalId) : null
@@ -190,8 +228,10 @@ function buildIncidentRealtimePayload(incident) {
 }
 
 module.exports = {
+  buildFallbackPrediction,
   buildIncidentRealtimePayload,
   buildRequirementSummary,
+  canHospitalStabilize,
   determineSeverity,
   findClosestStabilizationHospital,
   getAvailableHospitals,

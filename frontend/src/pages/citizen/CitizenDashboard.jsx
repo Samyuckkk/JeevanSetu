@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { Navigate } from 'react-router-dom'
 import axios from 'axios'
@@ -12,6 +12,8 @@ export default function CitizenDashboard() {
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
   const [points, setPoints] = useState(user?.totalRewardPoints || 0)
+  const [reportHistory, setReportHistory] = useState([])
+  const [rewardHistory, setRewardHistory] = useState([])
   
   const fileInputRef = useRef(null)
 
@@ -22,6 +24,21 @@ export default function CitizenDashboard() {
       setImageFile(e.target.files[0])
     }
   }
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/citizen/history`)
+        setPoints(response.data.totalRewardPoints || 0)
+        setRewardHistory(response.data.rewardHistory || [])
+        setReportHistory(response.data.reports || [])
+      } catch (err) {
+        console.error('Failed to load citizen history', err)
+      }
+    }
+
+    loadHistory()
+  }, [API_URL])
 
   const handleReport = async (aidType) => {
     if (!imageFile) {
@@ -58,7 +75,9 @@ export default function CitizenDashboard() {
       })
 
       // Update Points Locally for UX
-      setPoints(points + 500)
+      setPoints(res.data.totalRewardPoints || points + 500)
+      setRewardHistory(res.data.rewardHistory || rewardHistory)
+      setReportHistory((prev) => [res.data.incident, ...prev])
       setSuccess("Emergency reported successfully! Help is on the way. (+500 Reward Points)")
       setImageFile(null)
       setDescription('')
@@ -158,6 +177,59 @@ export default function CitizenDashboard() {
                     </span>
                   </button>
                </div>
+          </div>
+        </section>
+
+        <section className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-xl font-bold mb-6 text-gray-800">Your Report History</h2>
+
+          <div className="space-y-4">
+            {reportHistory.length === 0 && (
+              <p className="text-sm text-gray-500">No reports submitted yet.</p>
+            )}
+            {reportHistory.map((report) => (
+              <div key={report._id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${report.aidType === 'emergency' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {report.aidType}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-white text-gray-600">
+                    {report.status}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-white text-gray-600">
+                    {new Date(report.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm font-medium text-gray-700">{report.description || 'No description provided.'}</p>
+                <p className="mt-2 text-xs text-gray-500">
+                  Hospital: {report.assignedHospital?.name || report.selectedHospital?.name || 'Not assigned yet'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-xl font-bold mb-6 text-gray-800">Reward History</h2>
+
+          <div className="space-y-3">
+            {rewardHistory.length === 0 && (
+              <p className="text-sm text-gray-500">No rewards earned yet.</p>
+            )}
+            {rewardHistory
+              .slice()
+              .reverse()
+              .map((reward, index) => (
+                <div key={`${reward.createdAt}-${index}`} className="rounded-xl border border-gray-100 bg-gray-50 p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">{reward.reason || 'Reward granted'}</p>
+                    <p className="text-xs text-gray-500">{reward.createdAt ? new Date(reward.createdAt).toLocaleString() : ''}</p>
+                  </div>
+                  <span className="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full shadow-inner">
+                    +{reward.points || 0}
+                  </span>
+                </div>
+              ))}
           </div>
         </section>
       </div>
