@@ -15,9 +15,7 @@ import {
   Settings2,
   Siren,
 } from 'lucide-react'
-import { DirectionsRenderer, GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api'
-
-const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '0.75rem' }
+import LeafletMap from '../../components/LeafletMap'
 
 function mergeIncident(list, incident) {
   const next = [incident, ...list.filter((item) => item._id !== incident._id)]
@@ -28,8 +26,14 @@ function getIncidentOrigin(incident) {
   return incident?.ambulanceLocation || incident?.location || null
 }
 
+function getStatusGroup(incident) {
+  if (incident.status === 'completed' || incident.arrivalStatus === 'arrived') return 'completed'
+  if (incident.arrivalStatus === 'incoming' || incident.transportStatus === 'arriving') return 'arriving'
+  return 'pending'
+}
+
 export default function HospitalDashboardLive() {
-  const { user, API_URL, logout } = useAuth()
+  const { user, loading: authLoading, API_URL, logout } = useAuth()
   const [inventory, setInventory] = useState({
     icuBeds: user?.inventory?.icuBeds ?? 0,
     ventilators: user?.inventory?.ventilators ?? 0,
@@ -39,22 +43,12 @@ export default function HospitalDashboardLive() {
   const [savingInv, setSavingInv] = useState(false)
   const [incomingPatients, setIncomingPatients] = useState([])
   const [selectedIncidentId, setSelectedIncidentId] = useState(null)
-  const [activeRoute, setActiveRoute] = useState(null)
-  const [mapError, setMapError] = useState('')
-
   const hospitalId = user?.id || user?._id
   const hospitalLoc = user?.location || { lat: 18.5204, lng: 73.8567 }
   const selectedIncident = useMemo(
     () => incomingPatients.find((incident) => incident._id === selectedIncidentId) || incomingPatients[0] || null,
     [incomingPatients, selectedIncidentId],
   )
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: 'AIzaSyCR7LdvZDlkYsjANjULsrQXn7iOw46oH1Q',
-  })
-
-  if (!user || user.role !== 'hospital') return <Navigate to="/hospital/login" />
 
   useEffect(() => {
     const hydrateCases = async () => {
@@ -104,38 +98,6 @@ export default function HospitalDashboardLive() {
     return () => socket.disconnect()
   }, [hospitalId])
 
-  useEffect(() => {
-    if (!selectedIncident) {
-      setActiveRoute(null)
-      setMapError('')
-      return
-    }
-
-    if (!isLoaded || !window.google) return
-
-    const origin = getIncidentOrigin(selectedIncident)
-    if (!origin || !hospitalLoc) return
-
-    setMapError('')
-    const directionsService = new window.google.maps.DirectionsService()
-    directionsService.route(
-      {
-        origin: new window.google.maps.LatLng(origin.lat, origin.lng),
-        destination: new window.google.maps.LatLng(hospitalLoc.lat, hospitalLoc.lng),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK) {
-          setActiveRoute(result)
-          setMapError('')
-        } else {
-          setActiveRoute(null)
-          setMapError(`Route unavailable: ${status}`)
-        }
-      },
-    )
-  }, [selectedIncident, hospitalLoc, isLoaded])
-
   const handleInventoryUpdate = async (event) => {
     event.preventDefault()
     setSavingInv(true)
@@ -155,6 +117,12 @@ export default function HospitalDashboardLive() {
       setSavingInv(false)
     }
   }
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-gray-50 p-6" />
+  }
+
+  if (!user || user.role !== 'hospital') return <Navigate to="/hospital/login" />
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -233,7 +201,7 @@ export default function HospitalDashboardLive() {
                   </div>
                   <p className="text-sm font-semibold text-gray-800">{incident.symptoms || 'Symptoms pending from ambulance'}</p>
                   <p className="mt-1 text-xs font-semibold text-gray-500">
-                    {incident.assignedAmbulance?.vehicleNumber || 'Ambulance'} • {incident.transportStatus}
+                    {incident.assignedAmbulance?.vehicleNumber || 'Ambulance'} | {getStatusGroup(incident)} | {incident.transportStatus}
                   </p>
                 </button>
               ))}
@@ -248,32 +216,15 @@ export default function HospitalDashboardLive() {
               Live Routing Feed
             </h2>
             <div className="h-[420px] overflow-hidden rounded-xl bg-gray-100">
-              {loadError && (
-                <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-red-600">
-                  Failed to load Google Maps.
-                </div>
-              )}
-              {!loadError && !isLoaded && (
-                <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-gray-500">
-                  Loading live map...
-                </div>
-              )}
-              {isLoaded && (
-                <GoogleMap mapContainerStyle={mapContainerStyle} center={hospitalLoc} zoom={13} options={{ disableDefaultUI: true }}>
-                  <Marker position={hospitalLoc} label="H" />
-                  {selectedIncident && getIncidentOrigin(selectedIncident) && (
-                    <Marker position={getIncidentOrigin(selectedIncident)} label="A" />
-                  )}
-                  {activeRoute && (
-                    <DirectionsRenderer
-                      directions={activeRoute}
-                      options={{ polylineOptions: { strokeColor: '#059669', strokeWeight: 5 } }}
-                    />
-                  )}
-                </GoogleMap>
-              )}
+              <LeafletMap
+                origin={selectedIncident ? getIncidentOrigin(selectedIncident) : null}
+                destination={hospitalLoc}
+                strokeColor="#059669"
+                originLabel="A"
+                destLabel="H"
+                height="420px"
+              />
             </div>
-            {mapError && <p className="mt-3 text-xs font-semibold text-amber-700">{mapError}</p>}
             <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-gray-500">
               <MapPin className="h-3.5 w-3.5" />
               Route is recalculated from the clicked ambulance card and refreshed from the latest streamed ambulance position.

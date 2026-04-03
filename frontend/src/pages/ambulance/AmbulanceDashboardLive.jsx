@@ -16,9 +16,7 @@ import {
   Route,
   Stethoscope,
 } from 'lucide-react'
-import { DirectionsRenderer, GoogleMap, Marker, Polyline, useJsApiLoader } from '@react-google-maps/api'
-
-const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '1rem' }
+import LeafletMap from '../../components/LeafletMap'
 
 const initialVitals = {
   heartRate: 86,
@@ -68,7 +66,8 @@ function normalizeHospital(hospital, fallbackOptions = []) {
 }
 
 export default function AmbulanceDashboardLive() {
-  const { user, API_URL, logout } = useAuth()
+  const { user, loading: authLoading, API_URL, logout } = useAuth()
+  const ambulanceUserId = user?.id || user?._id || null
   const [incidents, setIncidents] = useState([])
   const [activeIncident, setActiveIncident] = useState(null)
   const [vitals, setVitals] = useState(initialVitals)
@@ -78,25 +77,16 @@ export default function AmbulanceDashboardLive() {
   const [loading, setLoading] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [routeAlert, setRouteAlert] = useState('')
-  const [activeRoute, setActiveRoute] = useState(null)
   const [recentIncidents, setRecentIncidents] = useState([])
   const [ambulanceLocation, setAmbulanceLocation] = useState(user?.location || null)
-  const [mapError, setMapError] = useState('')
   const vitalsRef = useRef(initialVitals)
   const activeIncidentRef = useRef(null)
   const ambulanceLocationRef = useRef(user?.location || null)
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: 'AIzaSyCR7LdvZDlkYsjANjULsrQXn7iOw46oH1Q',
-  })
 
   const mapOrigin = useMemo(
     () => activeIncident?.ambulanceLocation || ambulanceLocation || activeIncident?.location || { lat: 18.5204, lng: 73.8567 },
     [activeIncident, ambulanceLocation],
   )
-
-  if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
 
   useEffect(() => {
     activeIncidentRef.current = activeIncident
@@ -178,10 +168,12 @@ export default function AmbulanceDashboardLive() {
   }, [API_URL])
 
   useEffect(() => {
+    if (!ambulanceUserId) return undefined
+
     const socket = io('http://localhost:3000', { withCredentials: true })
 
     socket.emit('join', 'ambulance')
-    socket.emit('join', `ambulance_${user.id}`)
+    socket.emit('join', `ambulance_${ambulanceUserId}`)
 
     socket.on('incoming_incident', (incident) => {
       setIncidents((prev) => [incident, ...prev.filter((item) => item._id !== incident._id)])
@@ -213,40 +205,9 @@ export default function AmbulanceDashboardLive() {
     })
 
     return () => socket.disconnect()
-  }, [user.id])
+  }, [ambulanceUserId])
 
-  useEffect(() => {
-    if (!selectedHospital?.location) {
-      setActiveRoute(null)
-      setMapError('')
-      return
-    }
 
-    if (!isLoaded || !window.google) return
-
-    setMapError('')
-
-    const directionsService = new window.google.maps.DirectionsService()
-    directionsService.route(
-      {
-        origin: new window.google.maps.LatLng(mapOrigin.lat, mapOrigin.lng),
-        destination: new window.google.maps.LatLng(
-          selectedHospital.location.lat,
-          selectedHospital.location.lng,
-        ),
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK) {
-          setActiveRoute(result)
-          setMapError('')
-        } else {
-          setActiveRoute(null)
-          setMapError(`Route unavailable: ${status}`)
-        }
-      },
-    )
-  }, [isLoaded, mapOrigin, selectedHospital])
 
   useEffect(() => {
     if (!activeIncident?._id || !selectedHospital?.hospitalId) {
@@ -369,6 +330,12 @@ export default function AmbulanceDashboardLive() {
     setRouteAlert('')
     setStreaming(false)
   }
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-rose-50 p-6" />
+  }
+
+  if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
 
   return (
     <div className="min-h-screen bg-rose-50 p-6">
@@ -606,39 +573,18 @@ export default function AmbulanceDashboardLive() {
                   <h2 className="text-xl font-bold text-gray-900">Live Route</h2>
                 </div>
                 <div className="h-[420px] overflow-hidden rounded-2xl bg-gray-100">
-                  {loadError && (
-                    <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-red-600">
-                      Failed to load Google Maps.
-                    </div>
-                  )}
-                  {!loadError && !isLoaded && (
-                    <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-gray-500">
-                      Loading live map...
-                    </div>
-                  )}
-                  {isLoaded && (
-                    <GoogleMap mapContainerStyle={mapContainerStyle} center={mapOrigin} zoom={12} options={{ disableDefaultUI: true }}>
-                      <Marker position={mapOrigin} label="A" />
-                      {selectedHospital?.location && <Marker position={selectedHospital.location} label="H" />}
-                      {activeRoute && (
-                        <DirectionsRenderer
-                          directions={activeRoute}
-                          options={{ polylineOptions: { strokeColor: '#dc2626', strokeWeight: 5 } }}
-                        />
-                      )}
-                      {!activeRoute && selectedHospital?.location && (
-                        <Polyline
-                          path={[mapOrigin, selectedHospital.location]}
-                          options={{ strokeColor: '#dc2626', strokeWeight: 4, strokeOpacity: 0.85 }}
-                        />
-                      )}
-                    </GoogleMap>
-                  )}
+                  <LeafletMap
+                    origin={mapOrigin}
+                    destination={selectedHospital?.location || null}
+                    strokeColor="#dc2626"
+                    originLabel="A"
+                    destLabel="H"
+                    height="420px"
+                  />
                 </div>
                 <div className="mt-4 rounded-2xl bg-gray-50 p-4">
                   <p className="text-sm font-bold text-gray-800">Current destination</p>
                   <p className="mt-1 text-sm text-gray-600">{selectedHospital ? `${selectedHospital.name} (${selectedHospital.status})` : 'No hospital selected yet'}</p>
-                  {mapError && <p className="mt-2 text-xs font-semibold text-amber-700">{mapError}</p>}
                   <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
                     <Navigation className="h-3.5 w-3.5" />
                     Route auto-updates when critical vitals trigger a reroute.

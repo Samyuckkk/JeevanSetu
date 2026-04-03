@@ -99,7 +99,7 @@ async function updateLocation(req, res) {
         location,
         lastLocationUpdate: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     )
 
     if (incidentId) {
@@ -108,7 +108,7 @@ async function updateLocation(req, res) {
         {
           ambulanceLocation: location,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
 
       if (incident) {

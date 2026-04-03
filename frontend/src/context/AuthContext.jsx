@@ -12,13 +12,20 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Attempt to hydrate on refresh (Since we use httpOnly cookies, we might just 
-    // rely on storing {role, id} in localStorage as a helper, or verify endpoint)
-    const stored = localStorage.getItem('userMeta');
-    if (stored) {
-      setUser(JSON.parse(stored));
-    }
-    setLoading(false);
+    const restoreSession = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/auth/me`);
+        const userData = res.data.user;
+        setUser(userData);
+        localStorage.setItem('userMeta', JSON.stringify(userData));
+      } catch {
+        setUser(null);
+        localStorage.removeItem('userMeta');
+      } finally {
+        setLoading(false);
+      }
+    };
+    restoreSession();
   }, []);
 
   const login = async (role, data) => {

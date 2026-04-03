@@ -4,6 +4,21 @@ const ambulanceModel = require('../models/ambulance.model')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 
+function setAuthCookie(res, token) {
+    res.cookie('token', token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    })
+}
+
+function clearAuthCookie(res) {
+    res.clearCookie('token', {
+        httpOnly: true,
+        sameSite: 'lax'
+    })
+}
+
 async function registerCitizen(req, res) {
     try {
         const { name, email, password } = req.body
@@ -29,7 +44,7 @@ async function registerCitizen(req, res) {
             process.env.JWT_SECRET
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(201).json({
             message: "Citizen registered successfully",
@@ -74,7 +89,7 @@ async function loginCitizen(req, res) {
             process.env.JWT_SECRET
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(200).json({
             message: "Citizen logged in successfully",
@@ -95,7 +110,7 @@ async function loginCitizen(req, res) {
 }
 
 function logoutCitizen(req, res) {
-    res.clearCookie('token')
+    clearAuthCookie(res)
 
     res.status(200).json({
         message: "Citizen logged out successfully"
@@ -128,7 +143,7 @@ async function registerAmbulance(req, res) {
             { expiresIn: '7d' }
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(201).json({
             message: "Ambulance registered",
@@ -172,7 +187,7 @@ async function loginAmbulance(req, res) {
             { expiresIn: '7d' }
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(200).json({
             message: "Ambulance logged in",
@@ -191,7 +206,7 @@ async function loginAmbulance(req, res) {
 }
 
 function logoutAmbulance(req, res) {
-    res.clearCookie('token')
+    clearAuthCookie(res)
     res.status(200).json({ message: "Logged out" })
 }
 
@@ -223,7 +238,7 @@ async function registerHospital(req, res) {
             { expiresIn: '7d' }
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(201).json({
             message: "Hospital registered",
@@ -268,7 +283,7 @@ async function loginHospital(req, res) {
             { expiresIn: '7d' }
         )
 
-        res.cookie('token', token)
+        setAuthCookie(res, token)
 
         res.status(200).json({
             message: "Hospital logged in",
@@ -288,10 +303,38 @@ async function loginHospital(req, res) {
 }
 
 function logoutHospital(req, res) {
-    res.clearCookie('token')
+    clearAuthCookie(res)
     res.status(200).json({ message: "Logged out" })
 }
 
+
+async function getMe(req, res) {
+    try {
+        const jwt = require('jsonwebtoken')
+        const token = req.cookies.token
+        if (!token) return res.status(401).json({ message: 'No session' })
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+        const { id, role } = decoded
+
+        if (role === 'ambulance') {
+            const ambulance = await ambulanceModel.findById(id).select('-password')
+            if (!ambulance) return res.status(401).json({ message: 'Not found' })
+            return res.json({ user: { id: ambulance._id, vehicleNumber: ambulance.vehicleNumber, type: ambulance.type, status: ambulance.status, location: ambulance.location, role: 'ambulance' } })
+        }
+        if (role === 'hospital') {
+            const hospital = await hospitalModel.findById(id).select('-password')
+            if (!hospital) return res.status(401).json({ message: 'Not found' })
+            return res.json({ user: { id: hospital._id, name: hospital.name, email: hospital.email, location: hospital.location, inventory: hospital.inventory, status: hospital.status, role: 'hospital' } })
+        }
+        // citizen
+        const citizen = await citizenModel.findById(id).select('-password')
+        if (!citizen) return res.status(401).json({ message: 'Not found' })
+        return res.json({ user: { id: citizen._id, name: citizen.name, email: citizen.email, totalRewardPoints: citizen.totalRewardPoints, role: 'citizen' } })
+    } catch (err) {
+        return res.status(401).json({ message: 'Invalid session' })
+    }
+}
 
 module.exports = {
     registerCitizen,
@@ -302,5 +345,6 @@ module.exports = {
     logoutAmbulance,
     registerHospital,
     loginHospital,
-    logoutHospital
+    logoutHospital,
+    getMe
 }

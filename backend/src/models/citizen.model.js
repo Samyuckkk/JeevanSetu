@@ -25,6 +25,10 @@ const citizenSchema = new mongoose.Schema({
     rewardHistory: [
         {
             points: Number,
+            reason: {
+                type: String,
+                default: 'Reward granted'
+            },
             createdAt: {
                 type: Date,
                 default: Date.now

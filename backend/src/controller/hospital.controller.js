@@ -8,7 +8,7 @@ async function updateInventory(req, res) {
     const hospital = await hospitalModel.findByIdAndUpdate(
       req.user.id,
       { inventory },
-      { new: true },
+      { returnDocument: 'after' },
     )
 
     if (!hospital) return res.status(404).json({ message: 'Hospital not found' })

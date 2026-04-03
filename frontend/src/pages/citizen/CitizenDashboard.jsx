@@ -5,7 +5,7 @@ import axios from 'axios'
 import { Camera, MapPin, Loader2, CheckCircle2 } from 'lucide-react'
 
 export default function CitizenDashboard() {
-  const { user, API_URL, logout } = useAuth()
+  const { user, loading: authLoading, API_URL, logout } = useAuth()
   const [imageFile, setImageFile] = useState(null)
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,7 +17,11 @@ export default function CitizenDashboard() {
   
   const fileInputRef = useRef(null)
 
-  if (!user || user.role !== 'citizen') return <Navigate to="/citizen/login" />
+  useEffect(() => {
+    if (typeof user?.totalRewardPoints === 'number') {
+      setPoints(user.totalRewardPoints)
+    }
+  }, [user])
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -29,9 +33,9 @@ export default function CitizenDashboard() {
     const loadHistory = async () => {
       try {
         const response = await axios.get(`${API_URL}/citizen/history`)
-        setPoints(response.data.totalRewardPoints || 0)
-        setRewardHistory(response.data.rewardHistory || [])
-        setReportHistory(response.data.reports || [])
+        setPoints(typeof response.data?.totalRewardPoints === 'number' ? response.data.totalRewardPoints : 0)
+        setRewardHistory(Array.isArray(response.data?.rewardHistory) ? response.data.rewardHistory : [])
+        setReportHistory(Array.isArray(response.data?.reports) ? response.data.reports : [])
       } catch (err) {
         console.error('Failed to load citizen history', err)
       }
@@ -74,10 +78,16 @@ export default function CitizenDashboard() {
         }
       })
 
-      // Update Points Locally for UX
-      setPoints(res.data.totalRewardPoints || points + 500)
-      setRewardHistory(res.data.rewardHistory || rewardHistory)
-      setReportHistory((prev) => [res.data.incident, ...prev])
+      const nextTotalPoints = typeof res.data?.totalRewardPoints === 'number'
+        ? res.data.totalRewardPoints
+        : points + 500
+      const nextRewardHistory = Array.isArray(res.data?.rewardHistory)
+        ? res.data.rewardHistory
+        : [...rewardHistory, { points: 500, reason: 'Incident reported', createdAt: new Date().toISOString() }]
+
+      setPoints(nextTotalPoints)
+      setRewardHistory(nextRewardHistory)
+      setReportHistory((prev) => (res.data?.incident ? [res.data.incident, ...prev] : prev))
       setSuccess("Emergency reported successfully! Help is on the way. (+500 Reward Points)")
       setImageFile(null)
       setDescription('')
@@ -94,6 +104,12 @@ export default function CitizenDashboard() {
       setLoading(false)
     }
   }
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-gray-50 p-6" />
+  }
+
+  if (!user || user.role !== 'citizen') return <Navigate to="/citizen/login" />
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
