@@ -3,7 +3,19 @@ import { useAuth } from '../../context/AuthContext'
 import { Navigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import axios from 'axios'
-import { Ambulance, MapPin, Activity, Stethoscope, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Ambulance, MapPin, Activity, Stethoscope, ChevronRight, CheckCircle2, Navigation2, Loader2, Hospital } from 'lucide-react'
+
+const pageVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0, transition: { staggerChildren: 0.1, duration: 0.6, ease: [0.25, 0.8, 0.25, 1] } },
+  exit: { opacity: 0, y: -20 }
+}
+
+const itemVariants = {
+  initial: { opacity: 0, y: 15 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.8, 0.25, 1] } }
+}
 
 export default function AmbulanceDashboard() {
   const { user, API_URL, logout } = useAuth()
@@ -24,19 +36,11 @@ export default function AmbulanceDashboard() {
 
   useEffect(() => {
     const socket = io('http://localhost:3000', { withCredentials: true })
-    
     socket.emit('join', 'ambulance')
-
-    socket.on('incoming_incident', (incident) => {
-      setIncidents(prev => [incident, ...prev])
-    })
-
+    socket.on('incoming_incident', (incident) => setIncidents(prev => [incident, ...prev]))
     socket.on('incident_taken', ({ incidentId }) => {
       setIncidents(prev => prev.filter(i => i._id !== incidentId))
-      if (activeIncident && activeIncident._id === incidentId && activeIncident.status === 'pending') {
-      }
     })
-
     return () => socket.disconnect()
   }, [activeIncident])
 
@@ -71,134 +75,215 @@ export default function AmbulanceDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-rose-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen medical-mesh-bg p-4 md:p-8 text-slate-800">
+      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="max-w-5xl mx-auto space-y-6">
         
-        <header className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-rose-100">
-          <div className="flex items-center gap-3">
-            <div className="bg-rose-100 p-2 rounded-lg">
-              <Ambulance className="text-rose-600 w-6 h-6" />
+        <motion.header variants={itemVariants} className="flex justify-between items-center glass-panel p-4 md:p-6 rounded-[2rem] shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden relative">
+              <Ambulance className="w-6 h-6 z-10" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">Unit: {user.vehicleNumber}</h1>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Unit</p>
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight">{user.vehicleNumber}</h1>
+            </div>
           </div>
-          <button onClick={logout} className="text-sm bg-rose-100 text-rose-700 hover:bg-rose-200 px-4 py-2 rounded-lg font-bold">End Shift (Logout)</button>
-        </header>
+          <button onClick={logout} className="text-sm bg-white/50 border border-slate-200 hover:bg-slate-100 text-slate-600 px-5 py-2.5 rounded-xl font-bold transition-all">Sign Off (Logout)</button>
+        </motion.header>
 
-        {!activeIncident && (
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-rose-100">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Activity className="text-rose-500"/> Dispatch Radar
-            </h2>
-            
-            {incidents.length === 0 ? (
-              <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl">
-                <div className="animate-ping w-4 h-4 bg-rose-400 rounded-full mb-4"></div>
-                <p className="text-gray-500 font-medium">Scanning for emergencies in your sector...</p>
+        <AnimatePresence mode="wait">
+          {!activeIncident && (
+            <motion.section key="radar" variants={itemVariants} initial="initial" animate="animate" exit={{ opacity: 0, y: -20 }} className="creative-card p-6 md:p-8 rounded-[2.5rem] relative overflow-hidden bg-white">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-rose-500 to-transparent opacity-50"></div>
+              
+              <div className="flex items-center gap-3 mb-8">
+                <div className="pulse-ring w-3 h-3 bg-rose-500 rounded-full ml-1"></div>
+                <h2 className="text-xl font-bold text-slate-800">Dispatch Radar Feed</h2>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {incidents.map(inc => (
-                  <div key={inc._id} className={`p-4 rounded-xl border-l-4 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between bg-white ${inc.aidType === 'emergency' ? 'border-red-500 bg-red-50' : 'border-blue-500'}`}>
-                    <img src={inc.image} alt="Incident" className="w-24 h-24 object-cover rounded-lg shadow-sm" />
-                    <div className="flex-1 w-full">
-                       <span className={`inline-block px-2 py-1 rounded text-xs font-bold uppercase tracking-wider mb-2 ${inc.aidType === 'emergency' ? 'bg-red-200 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
-                         {inc.aidType}
-                       </span>
-                       <p className="text-gray-600 font-medium text-sm line-clamp-2">{inc.description || "No specific details provided."}</p>
-                       <p className="text-gray-500 text-xs mt-2 flex items-center gap-1"><MapPin className="w-3 h-3"/> Location: {inc.location?.lat.toFixed(4)}, {inc.location?.lng.toFixed(4)}</p>
+              
+              {incidents.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 bg-slate-50/50 rounded-3xl">
+                  <Activity className="w-10 h-10 text-slate-300 mb-4 animate-pulse" />
+                  <p className="text-slate-400 font-bold text-lg">Scanning Sector M-4...</p>
+                  <p className="text-slate-400 text-sm mt-1">Waiting for incoming dispatch requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <AnimatePresence>
+                    {incidents.map((inc) => (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        key={inc._id} 
+                        className={`p-4 md:p-5 rounded-[1.5rem] border shadow-sm flex flex-col sm:flex-row gap-5 items-center justify-between transition-all hover:shadow-md ${
+                          inc.aidType === 'emergency' 
+                            ? 'border-rose-200 bg-rose-50/30' 
+                            : 'border-blue-100 bg-blue-50/30'
+                        }`}
+                      >
+                        <div className="relative shrink-0">
+                          {inc.image ? (
+                            <img src={inc.image} alt="Incident" className="w-24 h-24 object-cover rounded-[1rem] shadow-sm transform transition-transform hover:scale-105" />
+                          ) : (
+                            <div className="w-24 h-24 bg-slate-200 rounded-[1rem] flex items-center justify-center">No Image</div>
+                          )}
+                          <div className={`absolute -top-2 -right-2 w-4 h-4 rounded-full border-2 border-white ${inc.aidType === 'emergency' ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'}`}></div>
+                        </div>
+
+                        <div className="flex-1 w-full text-center sm:text-left">
+                           <span className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-2 ${
+                             inc.aidType === 'emergency' ? 'bg-rose-600 text-white shadow-sm' : 'bg-blue-100 text-blue-700'
+                           }`}>
+                             {inc.aidType}
+                           </span>
+                           <p className="text-slate-700 font-semibold text-sm line-clamp-2 md:text-base leading-relaxed">
+                             {inc.description || "Unspecified incident detected at location."}
+                           </p>
+                           <p className="text-slate-400 text-xs mt-3 flex items-center justify-center sm:justify-start gap-1.5 font-medium">
+                             <MapPin className="w-3.5 h-3.5"/> 
+                             GPS: {inc.location?.lat.toFixed(5)}, {inc.location?.lng.toFixed(5)}
+                           </p>
+                        </div>
+                        
+                        <button 
+                          onClick={() => handleAccept(inc)}
+                          disabled={loading}
+                          className="w-full sm:w-auto px-8 py-3.5 bg-slate-900 hover:bg-black text-white font-bold rounded-2xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-70 group"
+                        >
+                          {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Respond'}
+                          {!loading && <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.section>
+          )}
+
+          {activeIncident && !allocatedHospital && (
+            <motion.section key="active" variants={itemVariants} initial="initial" animate="animate" className="glass-panel p-6 md:p-8 rounded-[2.5rem] border border-emerald-100/50 flex flex-col lg:flex-row gap-8 relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
+               
+               <div className="flex-1">
+                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 mb-6">
+                   <Navigation2 className="w-6 h-6" />
+                 </div>
+                 <h2 className="text-3xl font-black mb-3 text-slate-800 tracking-tight">Mission Active</h2>
+                 <p className="text-slate-500 font-medium leading-relaxed mb-8">
+                   Proceed to coordinates. Once visual is established, collect patient vitals and symptoms to initiate ML-driven hospital allocation.
+                 </p>
+                 
+                 <div className="bg-white p-5 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                    <img src={activeIncident.image} className="w-full h-40 object-cover rounded-xl mb-4 group-hover:scale-105 transition-transform duration-500" alt="Target"/>
+                    <div className="absolute top-8 left-8 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-lg text-xs font-bold font-mono tracking-wider">
+                      LAT: {activeIncident.location?.lat.toFixed(4)} <br/>
+                      LNG: {activeIncident.location?.lng.toFixed(4)}
                     </div>
-                    <button 
-                      onClick={() => handleAccept(inc)}
-                      disabled={loading}
-                      className="w-full sm:w-auto px-6 py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-md"
-                    >
-                      Accept
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+                 </div>
+               </div>
 
-        {activeIncident && !allocatedHospital && (
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 ring-2 ring-emerald-500 ring-opacity-20 flex flex-col lg:flex-row gap-8">
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2 text-emerald-800">
-                <CheckCircle2 /> Incident Accepted
-              </h2>
-              <p className="text-gray-600 font-medium mb-6">You are en route! Gather patient symptoms upon pickup to process hospital allocation.</p>
-              
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6">
-                 <img src={activeIncident.image} className="w-full h-32 object-cover rounded-lg mb-4" alt="Reference"/>
-                 <p className="text-sm font-bold text-gray-700">Coordinates: {activeIncident.location?.lat}, {activeIncident.location?.lng}</p>
-              </div>
-            </div>
+               <div className="flex-[1.2]">
+                 <form onSubmit={handleVitalsSubmit} className="bg-white p-6 md:p-8 rounded-[2rem] shadow-lg border border-slate-100 h-full flex flex-col justify-between">
+                   <div>
+                     <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg">
+                       <Stethoscope className="text-rose-500 w-5 h-5"/> Input Vitals
+                     </h3>
+                     
+                     <div className="grid grid-cols-2 gap-4 mb-6">
+                       {[
+                         { label: 'Heart Rate', stateKey: 'heartRate', unit: 'bpm', type: 'number' },
+                         { label: 'SpO2', stateKey: 'spo2', unit: '%', type: 'number' },
+                         { label: 'Systolic BP', stateKey: 'systolicBP', unit: 'mmHg', type: 'number' },
+                         { label: 'Diastolic BP', stateKey: 'diastolicBP', unit: 'mmHg', type: 'number' },
+                       ].map((field) => (
+                         <div key={field.stateKey} className="group">
+                           <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{field.label}</label>
+                           <div className="relative">
+                             <input 
+                               type={field.type} 
+                               className="input-glass w-full rounded-xl p-3 font-semibold text-slate-700" 
+                               value={vitals[field.stateKey]} 
+                               onChange={e=>setVitals({...vitals, [field.stateKey]: e.target.value})} 
+                             />
+                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-300">{field.unit}</span>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                     
+                     <div className="mb-6">
+                       <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Primary Symptoms / Assessment</label>
+                       <textarea 
+                         className="input-glass w-full rounded-xl p-4 text-sm resize-none h-24 font-medium text-slate-700" 
+                         placeholder="e.g. blunt trauma, unresponsiveness, dilated pupils" 
+                         value={vitals.symptoms} 
+                         onChange={e=>setVitals({...vitals, symptoms: e.target.value})} 
+                       />
+                     </div>
+                   </div>
 
-            <form onSubmit={handleVitalsSubmit} className="flex-1 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Stethoscope className="text-rose-500"/> Input Patient Vitals</h3>
-              
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Heart Rate (bpm)</label>
-                  <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2" value={vitals.heartRate} onChange={e=>setVitals({...vitals, heartRate: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">SpO2 (%)</label>
-                  <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2" value={vitals.spo2} onChange={e=>setVitals({...vitals, spo2: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Systolic BP</label>
-                  <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2" value={vitals.systolicBP} onChange={e=>setVitals({...vitals, systolicBP: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Diastolic BP</label>
-                  <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2" value={vitals.diastolicBP} onChange={e=>setVitals({...vitals, diastolicBP: e.target.value})} />
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-gray-500 mb-1">Observed Symptoms / Keywords</label>
-                <textarea className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-rose-400 focus:outline-none" rows="3" placeholder="e.g. chest pain, suspected stroke, severe bleeding trauma" value={vitals.symptoms} onChange={e=>setVitals({...vitals, symptoms: e.target.value})} />
-              </div>
-
-              <button disabled={loading} type="submit" className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
-                Predict & Allocate Hospital <ChevronRight className="w-5 h-5"/>
-              </button>
-            </form>
-          </section>
-        )}
-
-        {allocatedHospital && (
-          <section className="bg-emerald-600 text-white p-8 rounded-3xl shadow-2xl relative overflow-hidden">
-             
-             <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'url(https://www.transparenttextures.com/patterns/cubes.png)'}}></div>
-
-             <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center">
-                <div className="flex-1">
-                  <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-4 inline-block">Allocation Complete</span>
-                  <h2 className="text-4xl font-extrabold mb-2">{allocatedHospital.name}</h2>
-                  <p className="text-emerald-100 font-medium text-lg mb-6"><MapPin className="inline w-5 h-5"/> {allocatedHospital.location?.lat}, {allocatedHospital.location?.lng}</p>
-                  
-                  <div className="bg-black/20 p-4 rounded-xl">
-                    <p className="text-sm font-bold text-emerald-200 mb-1">ML Assessment Summary:</p>
-                    <ul className="text-sm space-y-1">
-                      <li>• Specialists needed: {activeIncident.mlPrediction?.specialists_Needed.join(', ') || 'General'}</li>
-                      <li>• ICU Beds reserved: {activeIncident.mlPrediction?.icuBeds_Required}</li>
-                    </ul>
-                  </div>
-                </div>
-                
-                <div className="w-full md:w-1/3">
-                   <button onClick={() => { setActiveIncident(null); setAllocatedHospital(null); setVitals({heartRate:80, systolicBP:120, diastolicBP:80, spo2:98, temperature:98.6, symptoms:'' })}} className="w-full py-4 bg-white text-emerald-700 font-bold rounded-2xl shadow-xl hover:bg-emerald-50 transition-colors">
-                     Complete Mission
+                   <button disabled={loading} type="submit" className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all active:scale-95">
+                     {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Run Allocation Sequence'}
+                     {!loading && <ChevronRight className="w-5 h-5"/>}
                    </button>
-                </div>
-             </div>
-          </section>
-        )}
+                 </form>
+               </div>
+            </motion.section>
+          )}
 
-      </div>
+          {allocatedHospital && (
+            <motion.section key="hospital" variants={itemVariants} initial="initial" animate="animate" className="bg-slate-900 text-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+               <div className="absolute inset-0 bg-gradient-to-tr from-emerald-900/40 via-transparent to-transparent pointer-events-none"></div>
+               
+               <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center">
+                  <div className="flex-1">
+                    <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase mb-6 inline-flex items-center gap-2 border border-emerald-500/30">
+                      <CheckCircle2 className="w-4 h-4"/> Routing Locked
+                    </span>
+                    
+                    <h2 className="text-4xl md:text-5xl font-black mb-3 tracking-tighter drop-shadow-md">{allocatedHospital.name}</h2>
+                    <p className="text-slate-400 font-medium text-lg mb-8 flex items-center gap-2">
+                       <MapPin className="w-5 h-5 text-slate-500"/> 
+                       {allocatedHospital.location?.lat.toFixed(4)}, {allocatedHospital.location?.lng.toFixed(4)}
+                    </p>
+                    
+                    <div className="bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10">
+                      <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">ML Engine Assessment</p>
+                      <ul className="text-sm space-y-3 font-medium text-slate-300">
+                        <li className="flex justify-between">
+                           <span>Medical Specialists:</span>
+                           <span className="text-white bg-white/10 px-2 py-0.5 rounded text-xs">{activeIncident.mlPrediction?.specialists_Needed?.join(', ') || 'General'}</span>
+                        </li>
+                        <li className="flex justify-between">
+                           <span>ICU Configuration:</span>
+                           <span className="text-white bg-white/10 px-2 py-0.5 rounded text-xs">Level {activeIncident.mlPrediction?.icuBeds_Required > 0 ? 'CRITICAL' : 'STANDARD'}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  
+                  <div className="w-full md:w-1/3 flex flex-col gap-4">
+                     <div className="aspect-square bg-white/5 rounded-3xl border border-white/10 flex flex-col items-center justify-center p-6 text-center mb-4">
+                        <Hospital className="w-12 h-12 text-emerald-400 mb-3 opacity-50" />
+                        <h4 className="text-xl font-bold">ETA: 08:34s</h4>
+                        <p className="text-xs text-slate-500 mt-1 uppercase font-bold">Optimal Route Generated</p>
+                     </div>
+
+                     <button 
+                       onClick={() => { setActiveIncident(null); setAllocatedHospital(null); setVitals({heartRate:80, systolicBP:120, diastolicBP:80, spo2:98, temperature:98.6, symptoms:'' })}} 
+                       className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-lg rounded-2xl shadow-xl transition-colors"
+                     >
+                       Conclude Transport
+                     </button>
+                  </div>
+               </div>
+            </motion.section>
+          )}
+
+        </AnimatePresence>
+      </motion.div>
     </div>
   )
 }

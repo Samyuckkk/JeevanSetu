@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { Navigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import axios from 'axios'
-import { Camera, MapPin, Loader2, CheckCircle2 } from 'lucide-react'
+import { Camera, MapPin, Loader2, CheckCircle2, Siren, ShieldAlert, Award } from 'lucide-react'
 
 export default function CitizenDashboard() {
   const { user, loading: authLoading, API_URL, logout } = useAuth()
@@ -102,44 +103,73 @@ export default function CitizenDashboard() {
   }
 
   if (authLoading) {
-    return <div className="min-h-screen bg-gray-50 p-6" />
+    return <div className="min-h-screen bg-slate-50 p-6" />
   }
 
   if (!user || user.role !== 'citizen') return <Navigate to="/citizen/login" />
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm">
-          <h1 className="text-2xl font-bold text-gray-800">Welcome, {user.name}</h1>
-          <div className="flex items-center gap-4">
-            <span className="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full shadow-inner">
-              ⭐ {points} Points
-            </span>
-            <button onClick={logout} className="text-sm bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-lg font-bold transition-colors">Logout</button>
+    <div className="min-h-screen bg-slate-50/50">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 p-4 shadow-sm">
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-soft">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">{user.name}</h1>
+              <p className="text-xs font-semibold text-slate-500">Citizen Dashboard</p>
+            </div>
           </div>
-        </header>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shadow-sm">
+              <Award className="w-4 h-4 text-emerald-600" />
+              <span className="font-bold text-emerald-700 text-sm">
+                {points} Points
+              </span>
+            </div>
+            <button onClick={logout} className="text-sm border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-2 rounded-xl font-bold transition-all shadow-sm hover:shadow-soft">
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
 
-        <section className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold mb-6 text-gray-800">Report an Emergency</h2>
+      <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+        <motion.section 
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+          className="glass-panel-light p-6 md:p-8 rounded-[2rem] shadow-soft border border-white"
+        >
+          <div className="flex items-center gap-3 mb-8">
+            <Siren className="w-6 h-6 text-rose-500" />
+            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Dispatch Emergency Interface</h2>
+          </div>
           
-          {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm font-medium">{error}</div>}
-          {success && <div className="mb-4 p-3 bg-emerald-100 text-emerald-800 rounded-lg text-sm font-medium flex items-center gap-2"><CheckCircle2 className="w-5 h-5"/> {success}</div>}
+          {error && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-sm font-semibold">{error}</motion.div>}
+          {success && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6 p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl text-sm font-semibold flex items-center gap-2"><CheckCircle2 className="w-5 h-5"/> {success}</motion.div>}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                
                <div className="space-y-4">
                   <div 
-                    className={`h-64 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed transition-colors cursor-pointer overflow-hidden ${imageFile ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
+                    className={`h-64 rounded-2xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer overflow-hidden ${imageFile ? 'border-transparent shadow-lg' : 'border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
                     onClick={() => fileInputRef.current.click()}
                   >
                     {imageFile ? (
-                      <img src={URL.createObjectURL(imageFile)} alt="Incident Preview" className="w-full h-full object-cover" />
+                      <div className="relative w-full h-full">
+                        <img src={URL.createObjectURL(imageFile)} alt="Incident Preview" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <span className="bg-white/90 text-slate-900 px-4 py-2 rounded-xl font-bold text-sm shadow-xl backdrop-blur-sm">Change Image</span>
+                        </div>
+                      </div>
                     ) : (
-                      <>
-                        <Camera className="w-12 h-12 text-gray-400 mb-2" />
-                        <p className="text-gray-500 font-medium">Tap to open Camera / Gallery</p>
-                      </>
+                      <div className="flex flex-col items-center">
+                        <div className="bg-white p-4 rounded-full shadow-sm mb-3">
+                            <Camera className="w-8 h-8 text-blue-500" />
+                        </div>
+                        <p className="text-slate-600 font-semibold">Tap to capture incident</p>
+                        <p className="text-slate-400 text-xs mt-1">Camera or Gallery</p>
+                      </div>
                     )}
                   </div>
                   <input 
@@ -152,96 +182,135 @@ export default function CitizenDashboard() {
                   />
 
                   <textarea 
-                    placeholder="Add a brief description (optional)"
-                    className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 h-24"
+                    placeholder="Add operational details (optional)..."
+                    className="w-full rounded-2xl border border-slate-200 p-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-white shadow-sm h-28 resize-none transition-all placeholder:text-slate-400"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />
                </div>
 
                <div className="flex flex-col justify-center space-y-4">
-                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-2">
-                    <h3 className="text-sm font-bold text-amber-800 mb-1 flex items-center gap-2">
-                      <MapPin className="w-4 h-4"/> GPS Required
+                  <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100/50 mb-2">
+                    <h3 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                      <MapPin className="w-4 h-4"/> Live GPS Tracking Active
                     </h3>
-                    <p className="text-xs text-amber-700">Submitting an alert will strictly use your current location to dispatch aid.</p>
+                    <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                      Submitting an alert will strictly use your current location to dispatch aid immediately. Do not move from the incident spot if possible.
+                    </p>
                   </div>
 
-                  <button 
-                    onClick={() => handleReport('normal')}
-                    disabled={loading}
-                    className="group relative overflow-hidden h-20 bg-blue-100 hover:bg-blue-600 focus:bg-blue-600 text-blue-800 hover:text-white font-bold text-xl rounded-xl transition-all disabled:opacity-50"
-                  >
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                      {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Normal Assist'}
-                    </span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-4">
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleReport('normal')}
+                        disabled={loading}
+                        className="group relative overflow-hidden h-24 bg-white border-2 border-blue-500 text-blue-700 hover:bg-blue-50 focus:bg-blue-100 font-extrabold text-lg rounded-2xl transition-all disabled:opacity-50 shadow-sm"
+                      >
+                        <span className="relative z-10 flex flex-col items-center justify-center gap-1">
+                          {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
+                              <>
+                                <span>NORMAL</span>
+                                <span className="text-xs text-blue-500 font-bold">ASSIST</span>
+                              </>
+                          )}
+                        </span>
+                      </motion.button>
 
-                  <button 
-                    onClick={() => handleReport('emergency')}
-                    disabled={loading}
-                    className="group relative overflow-hidden h-20 bg-red-100 hover:bg-red-600 focus:bg-red-600 text-red-800 hover:text-white font-bold text-xl rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-red-100 hover:shadow-red-600/30"
-                  >
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                      {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'EMERGENCY ASSIST'}
-                    </span>
-                  </button>
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleReport('emergency')}
+                        disabled={loading}
+                        className="group relative overflow-hidden h-24 border-2 border-transparent bg-gradient-to-br from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-lg rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-red-500/30"
+                      >
+                        <span className="relative z-10 flex flex-col items-center justify-center gap-1">
+                          {loading ? <Loader2 className="w-6 h-6 animate-spin text-white" /> : (
+                              <>
+                                <span>CRITICAL</span>
+                                <span className="text-[10px] text-red-100 font-black tracking-wider bg-black/10 px-2 py-0.5 rounded uppercase">Emergency</span>
+                              </>
+                          )}
+                        </span>
+                        {!loading && <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                      </motion.button>
+                  </div>
                </div>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold mb-6 text-gray-800">Your Report History</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.section 
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}
+              className="glass-panel-light p-6 rounded-[2rem] shadow-soft border border-white"
+            >
+              <h2 className="text-lg font-bold mb-4 text-slate-800 flex items-center justify-between">
+                  Report History
+                  <span className="text-xs font-semibold bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">{reportHistory.length} Total</span>
+              </h2>
 
-          <div className="space-y-4">
-            {reportHistory.length === 0 && (
-              <p className="text-sm text-gray-500">No reports submitted yet.</p>
-            )}
-            {reportHistory.map((report) => (
-              <div key={report._id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${report.aidType === 'emergency' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                    {report.aidType}
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-white text-gray-600">
-                    {report.status}
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-white text-gray-600">
-                    {new Date(report.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm font-medium text-gray-700">{report.description || 'No description provided.'}</p>
-                <p className="mt-2 text-xs text-gray-500">
-                  Hospital: {report.assignedHospital?.name || report.selectedHospital?.name || 'Not assigned yet'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold mb-6 text-gray-800">Reward History</h2>
-
-          <div className="space-y-3">
-            {rewardHistory.length === 0 && (
-              <p className="text-sm text-gray-500">No rewards earned yet.</p>
-            )}
-            {rewardHistory
-              .slice()
-              .reverse()
-              .map((reward, index) => (
-                <div key={`${reward.createdAt}-${index}`} className="rounded-xl border border-gray-100 bg-gray-50 p-4 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">{reward.reason || 'Reward granted'}</p>
-                    <p className="text-xs text-gray-500">{reward.createdAt ? new Date(reward.createdAt).toLocaleString() : ''}</p>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {reportHistory.length === 0 && (
+                  <p className="text-sm text-slate-400 font-medium p-4 text-center bg-slate-50 rounded-xl">No reports submitted yet.</p>
+                )}
+                {reportHistory.map((report) => (
+                  <div key={report._id} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${report.aidType === 'emergency' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                        {report.aidType}
+                      </span>
+                      <span className="text-xs font-bold text-slate-400">
+                        {new Date(report.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800 line-clamp-1">{report.description || 'No operational description.'}</p>
+                    <div className="mt-3 flex items-center justify-between">
+                        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-100">
+                          {report.status}
+                        </span>
+                        <p className="text-[10px] font-bold text-slate-400 max-w-[120px] truncate">
+                            {report.assignedHospital?.name || report.selectedHospital?.name || 'Awaiting assignment'}
+                        </p>
+                    </div>
                   </div>
-                  <span className="font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full shadow-inner">
-                    +{reward.points || 0}
-                  </span>
-                </div>
-              ))}
-          </div>
-        </section>
+                ))}
+              </div>
+            </motion.section>
+
+            <motion.section 
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}
+              className="glass-panel-light p-6 rounded-[2rem] shadow-soft border border-white flex flex-col"
+            >
+              <h2 className="text-lg font-bold mb-4 text-slate-800 flex items-center justify-between">
+                  Reward Ledger
+              </h2>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar flex-1">
+                {rewardHistory.length === 0 && (
+                  <p className="text-sm text-slate-400 font-medium p-4 text-center bg-slate-50 rounded-xl">No rewards earned yet.</p>
+                )}
+                {rewardHistory
+                  .slice()
+                  .reverse()
+                  .map((reward, index) => (
+                    <div key={`${reward.createdAt}-${index}`} className="rounded-xl border border-emerald-100/50 bg-emerald-50/30 p-3 flex items-center justify-between hover:bg-emerald-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                              <Award className="w-4 h-4 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{reward.reason || 'Reward granted'}</p>
+                            <p className="text-[10px] font-semibold text-slate-400">{reward.createdAt ? new Date(reward.createdAt).toLocaleDateString() : ''}</p>
+                          </div>
+                      </div>
+                      <span className="font-extrabold text-emerald-600 tabular-nums">
+                        +{reward.points || 0}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </motion.section>
+        </div>
       </div>
     </div>
   )

@@ -332,34 +332,36 @@ export default function AmbulanceDashboardLive() {
   }
 
   if (authLoading) {
-    return <div className="min-h-screen bg-rose-50 p-6" />
+    return <div className="min-h-screen bg-slate-50 p-6" />
   }
 
   if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
 
   return (
-    <div className="min-h-screen bg-rose-50 p-6">
+    <div className="min-h-screen bg-slate-50/50 p-4 md:p-6 pb-20">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 rounded-2xl border border-rose-100 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-4 glass-panel-light rounded-3xl p-5 shadow-soft md:flex-row md:items-center md:justify-between border border-white">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-rose-100 p-3">
-              <Ambulance className="h-6 w-6 text-rose-600" />
+            <div className="rounded-2xl bg-rose-500 shadow-sm p-4 text-white">
+              <Ambulance className="h-7 w-7" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Unit {user.vehicleNumber}</h1>
-              <p className="text-sm font-medium text-gray-500">Dispatch, triage, routing and live hospital handoff</p>
+              <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">Unit {user.vehicleNumber}</h1>
+              <p className="text-sm font-semibold text-slate-500">Dispatch, triage, routing & live hospital handoff</p>
             </div>
           </div>
-          <button onClick={logout} className="rounded-xl bg-rose-100 px-4 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-200">
+          <button onClick={logout} className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-bold text-rose-700 transition hover:bg-rose-100 hover:shadow-soft">
             End Shift
           </button>
         </header>
 
         {!activeIncident && (
-          <section className="rounded-2xl border border-rose-100 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-rose-500" />
-              <h2 className="text-xl font-bold text-gray-900">Dispatch Radar</h2>
+          <section className="glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="p-2 bg-rose-50 rounded-xl">
+                 <Activity className="h-6 w-6 text-rose-500 pulse-ring" />
+              </div>
+              <h2 className="text-xl font-extrabold text-slate-800">Dispatch Radar</h2>
             </div>
 
             {incidents.length === 0 ? (
@@ -403,7 +405,7 @@ export default function AmbulanceDashboardLive() {
 
         {activeIncident && (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <section className="space-y-6 rounded-2xl border border-emerald-100 bg-white p-6 shadow-sm">
+            <section className="space-y-6 glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="mb-2 flex items-center gap-2 text-emerald-700">
@@ -567,10 +569,12 @@ export default function AmbulanceDashboardLive() {
             </section>
 
             <section className="space-y-6">
-              <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-4 flex items-center gap-2">
-                  <Route className="h-5 w-5 text-blue-500" />
-                  <h2 className="text-xl font-bold text-gray-900">Live Route</h2>
+              <div className="glass-panel-light rounded-3xl p-6 shadow-soft border border-white">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 rounded-xl">
+                    <Route className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-xl font-extrabold text-slate-800">Live Route</h2>
                 </div>
                 <div className="h-[420px] overflow-hidden rounded-2xl bg-gray-100">
                   <LeafletMap

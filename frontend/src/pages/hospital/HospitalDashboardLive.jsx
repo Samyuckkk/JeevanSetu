@@ -125,17 +125,19 @@ export default function HospitalDashboardLive() {
   if (!user || user.role !== 'hospital') return <Navigate to="/hospital/login" />
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-50 bg-emerald-700 p-4 text-white shadow-md">
+    <div className="min-h-screen bg-slate-50/50 pb-20">
+      <header className="sticky top-0 z-50 glass-panel-light border-b border-slate-200/60 p-4 shadow-sm backdrop-blur-xl bg-white/80">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <Building2 className="h-8 w-8" />
+            <div className="p-2.5 bg-emerald-600 rounded-xl shadow-soft">
+               <Building2 className="h-6 w-6 text-white" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold">{user.name} Control Center</h1>
-              <p className="text-sm text-emerald-100">Inbound ambulance streaming, triage and reroute monitor</p>
+              <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">{user.name}</h1>
+              <p className="text-xs font-semibold text-slate-500">Inbound ambulance triage & routing control center</p>
             </div>
           </div>
-          <button onClick={logout} className="rounded-lg border border-emerald-500 px-4 py-2 text-sm font-bold transition hover:bg-emerald-600">
+          <button onClick={logout} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:shadow-soft">
             Logout
           </button>
         </div>
@@ -143,11 +145,13 @@ export default function HospitalDashboardLive() {
 
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 p-6 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-6">
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="mb-6 flex items-center gap-2 text-xl font-bold text-gray-800">
-              <Settings2 className="h-5 w-5 text-emerald-600" />
-              Real-time Inventory
-            </h2>
+          <section className="glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
+            <div className="mb-6 flex items-center gap-3">
+               <div className="p-2 bg-emerald-50 rounded-xl">
+                  <Settings2 className="h-6 w-6 text-emerald-500" />
+               </div>
+               <h2 className="text-xl font-extrabold text-slate-800">Inventory Status</h2>
+            </div>
 
             <form onSubmit={handleInventoryUpdate} className="space-y-4">
               <label className="block text-sm font-bold text-gray-500">
@@ -173,13 +177,15 @@ export default function HospitalDashboardLive() {
             </form>
           </section>
 
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
-                <BellRing className="h-5 w-5 text-rose-500" />
-                Inbound Cases
-              </h2>
-              <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">{incomingPatients.length} live</span>
+          <section className="glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-50 rounded-xl">
+                   <BellRing className="h-6 w-6 text-rose-500 pulse-ring" />
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-800">Inbound Cases</h2>
+              </div>
+              <span className="rounded-full bg-rose-100 px-3 py-1 text-sm font-bold text-rose-700 shadow-sm border border-rose-200">{incomingPatients.length} Live</span>
             </div>
 
             <div className="space-y-3">
@@ -210,11 +216,13 @@ export default function HospitalDashboardLive() {
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-gray-800">
-              <MapIcon className="h-5 w-5 text-blue-500" />
-              Live Routing Feed
-            </h2>
+          <section className="glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
+            <div className="mb-6 flex items-center gap-3">
+                <div className="p-2 bg-blue-50 rounded-xl">
+                   <MapIcon className="h-6 w-6 text-blue-500" />
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-800">Live Routing Feed</h2>
+            </div>
             <div className="h-[420px] overflow-hidden rounded-xl bg-gray-100">
               <LeafletMap
                 origin={selectedIncident ? getIncidentOrigin(selectedIncident) : null}
@@ -231,11 +239,13 @@ export default function HospitalDashboardLive() {
             </p>
           </section>
 
-          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-gray-800">
-              <Activity className="h-5 w-5 text-rose-500" />
-              Handoff Panel
-            </h2>
+          <section className="glass-panel-light rounded-3xl p-6 md:p-8 shadow-soft border border-white">
+            <div className="mb-6 flex items-center gap-3">
+                <div className="p-2 bg-rose-50 rounded-xl">
+                   <Activity className="h-6 w-6 text-rose-500" />
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-800">Advanced Handoff Panel</h2>
+            </div>
 
             {!selectedIncident ? (
               <p className="text-sm italic text-gray-500">Select an inbound case to view live vitals, symptoms, requirements and specialist needs.</p>
