@@ -10,8 +10,8 @@ import HospitalAuth from './pages/hospital/HospitalAuth'
 
 // Dashboards
 import CitizenDashboard from './pages/citizen/CitizenDashboard'
-import AmbulanceDashboard from './pages/ambulance/AmbulanceDashboard'
-import HospitalDashboard from './pages/hospital/HospitalDashboard'
+import AmbulanceDashboard from './pages/ambulance/AmbulanceDashboardLive'
+import HospitalDashboard from './pages/hospital/HospitalDashboardLive'
 
 function App() {
   return (
