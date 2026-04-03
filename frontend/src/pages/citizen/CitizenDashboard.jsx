@@ -55,14 +55,12 @@ export default function CitizenDashboard() {
     setSuccess('')
 
     try {
-      // 1. Get location
       const pos = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
       })
       
       const { latitude, longitude } = pos.coords
 
-      // 2. Prepare Form Data
       const formData = new FormData()
       formData.append('image', imageFile)
       formData.append('aidType', aidType)
@@ -70,8 +68,6 @@ export default function CitizenDashboard() {
       formData.append('lng', longitude)
       formData.append('description', description)
 
-      // 3. Submit Alert
-      // Note: We need the citizen AuthToken in cookies which axios handles automatically
       const res = await axios.post(`${API_URL}/citizen/report`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
@@ -132,7 +128,6 @@ export default function CitizenDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                
-               {/* Image Capture Block */}
                <div className="space-y-4">
                   <div 
                     className={`h-64 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed transition-colors cursor-pointer overflow-hidden ${imageFile ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
@@ -164,7 +159,6 @@ export default function CitizenDashboard() {
                   />
                </div>
 
-               {/* Action Block */}
                <div className="flex flex-col justify-center space-y-4">
                   <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-2">
                     <h3 className="text-sm font-bold text-amber-800 mb-1 flex items-center gap-2">

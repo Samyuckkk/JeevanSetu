@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
 axios.defaults.withCredentials = true;
-// Assuming backend is at 3000
 const API_URL = 'http://localhost:3000/api'; 
 
 const AuthContext = createContext(null);

@@ -6,14 +6,11 @@ import axios from 'axios'
 import { Building2, Activity, MapPin, BellRing, Settings2, Save, Map as MapIcon, Loader2 } from 'lucide-react'
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from '@react-google-maps/api'
 
-// Define Map options
 const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '0.75rem' }
 
 export default function HospitalDashboard() {
   const { user, API_URL, logout } = useAuth()
   
-  // Local state initialized with user token payload from backend which must have these values, 
-  // or fetch from separate profile endpoint
   const [inventory, setInventory] = useState({
     icuBeds: 10,
     ventilators: 5,
@@ -27,22 +24,18 @@ export default function HospitalDashboard() {
   
   const { isLoaded } = useJsApiLoader({ id: 'google-map-script', googleMapsApiKey: 'AIzaSyCR7LdvZDlkYsjANjULsrQXn7iOw46oH1Q' })
 
-  // Assume user object has user.id, if not, we use what we have
   const hospitalId = user?.id || user?._id
-  const hospitalLoc = user?.location || { lat: 18.5204, lng: 73.8567 } // default to Pune
+  const hospitalLoc = user?.location || { lat: 18.5204, lng: 73.8567 }
 
   useEffect(() => {
     if(!hospitalId) return;
     const socket = io('http://localhost:3000', { withCredentials: true })
-    
-    // Join distinct hospital room
+
     socket.emit('join', `hospital_${hospitalId}`)
 
     socket.on('incoming_patient', (data) => {
-      // data format: { incident: {...vitals, mlPrediction}, eta: '10 mins' }
       setIncomingPatients(prev => [data, ...prev])
-      
-      // Calculate Route between hospital and incident if google maps loaded
+
       if (window.google) {
          fetchDirections(data.incident.location, hospitalLoc)
       }
@@ -105,7 +98,6 @@ export default function HospitalDashboard() {
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left Column: Inventory & Status */}
         <div className="space-y-6">
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><Settings2 className="w-5 h-5 text-emerald-600"/> Real-time Inventory</h2>
@@ -136,7 +128,6 @@ export default function HospitalDashboard() {
           </section>
         </div>
 
-        {/* Right Columns: Map & Incoming Flow */}
         <div className="lg:col-span-2 space-y-6 flex flex-col">
           
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1 min-h-[400px] flex flex-col relative">
@@ -163,11 +154,6 @@ export default function HospitalDashboard() {
                   )}
                 </GoogleMap>
               )}
-
-              {/* API Placeholder Warning Overlay based on string */}
-              {/*<div className="absolute top-2 left-2 bg-white/90 backdrop-blur text-xs font-bold px-3 py-1 rounded shadow-sm text-amber-700 border border-amber-200">
-                Awaiting valid API Key... Replace 'PLACEHOLDER_API_KEY_HERE_REPLACE_ME' in Dashboard.jsx
-              </div>*/}
 
             </div>
           </section>

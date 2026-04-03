@@ -19,7 +19,6 @@ const itemVariants = {
 export default function Home() {
   return (
     <div className="min-h-screen animated-bg flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      {/* Decorative backdrop shapes */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-white/20 blur-3xl pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[#3b82f6]/20 blur-3xl pointer-events-none" />
 

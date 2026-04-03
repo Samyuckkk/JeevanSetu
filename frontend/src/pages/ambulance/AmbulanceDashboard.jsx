@@ -23,7 +23,6 @@ export default function AmbulanceDashboard() {
   if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
 
   useEffect(() => {
-    // Setup Socket
     const socket = io('http://localhost:3000', { withCredentials: true })
     
     socket.emit('join', 'ambulance')
@@ -35,7 +34,6 @@ export default function AmbulanceDashboard() {
     socket.on('incident_taken', ({ incidentId }) => {
       setIncidents(prev => prev.filter(i => i._id !== incidentId))
       if (activeIncident && activeIncident._id === incidentId && activeIncident.status === 'pending') {
-         // edge case: someone else took it while viewing
       }
     })
 
@@ -47,7 +45,7 @@ export default function AmbulanceDashboard() {
       setLoading(true)
       const res = await axios.post(`${API_URL}/ambulance/accept-incident`, { incidentId: incident._id })
       setActiveIncident(res.data.incident)
-      setIncidents([]) // clear queue
+      setIncidents([])
     } catch(err) {
       alert("Failed to accept or already taken.")
     } finally {
@@ -76,7 +74,6 @@ export default function AmbulanceDashboard() {
     <div className="min-h-screen bg-rose-50 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Header */}
         <header className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-rose-100">
           <div className="flex items-center gap-3">
             <div className="bg-rose-100 p-2 rounded-lg">
@@ -87,7 +84,6 @@ export default function AmbulanceDashboard() {
           <button onClick={logout} className="text-sm bg-rose-100 text-rose-700 hover:bg-rose-200 px-4 py-2 rounded-lg font-bold">End Shift (Logout)</button>
         </header>
 
-        {/* State 1: Awaiting / Incoming */}
         {!activeIncident && (
           <section className="bg-white p-6 rounded-xl shadow-sm border border-rose-100">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -125,7 +121,6 @@ export default function AmbulanceDashboard() {
           </section>
         )}
 
-        {/* State 2: Accepted, En Route / Vitals Input */}
         {activeIncident && !allocatedHospital && (
           <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 ring-2 ring-emerald-500 ring-opacity-20 flex flex-col lg:flex-row gap-8">
             <div className="flex-1">
@@ -174,11 +169,9 @@ export default function AmbulanceDashboard() {
           </section>
         )}
 
-        {/* State 3: Hospital Allocated */}
         {allocatedHospital && (
           <section className="bg-emerald-600 text-white p-8 rounded-3xl shadow-2xl relative overflow-hidden">
              
-             {/* Background map placeholder */}
              <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'url(https://www.transparenttextures.com/patterns/cubes.png)'}}></div>
 
              <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center">
