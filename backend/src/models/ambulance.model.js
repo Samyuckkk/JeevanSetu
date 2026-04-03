@@ -6,9 +6,9 @@ const ambulanceSchema = new mongoose.Schema({
   password: { type: String, required: true },
 
   type: {
-      type: String,
-      enum: ['normal', 'emergency'],
-      required: true
+    type: String,
+    enum: ['normal', 'emergency'],
+    required: true
   },
 
   status: {

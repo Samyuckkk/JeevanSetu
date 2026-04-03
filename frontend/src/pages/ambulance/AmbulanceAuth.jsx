@@ -1,19 +1,38 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Ambulance, Lock, Hash, ShieldAlert } from 'lucide-react'
+import { Ambulance, Lock, Hash, ShieldAlert, Loader2 } from 'lucide-react'
 import AuthLayout from '../../components/AuthLayout'
+import { useAuth } from '../../context/AuthContext'
 
 export default function AmbulanceAuth({ mode }) {
   const isLogin = mode === 'login'
+  const { login, register } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({ vehicleNumber: '', password: '', type: 'normal' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+    setError('')
+  }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log('Ambulance Submit:', mode, formData)
-    // Add real API call here
+    setLoading(true)
+    try {
+      if (isLogin) {
+        await login('ambulance', { vehicleNumber: formData.vehicleNumber, password: formData.password })
+      } else {
+        await register('ambulance', formData)
+      }
+      navigate('/ambulance/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Authentication failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -25,6 +44,12 @@ export default function AmbulanceAuth({ mode }) {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm">
+            {error}
+          </div>
+        )}
+
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
             <Hash className="w-5 h-5" />
@@ -91,8 +116,10 @@ export default function AmbulanceAuth({ mode }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-rose-600/30 transition-all mt-4"
+          disabled={loading}
+          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-rose-600/30 transition-all mt-4 flex justify-center items-center gap-2"
         >
+          {loading && <Loader2 className="w-5 h-5 animate-spin" />}
           {isLogin ? 'Sign In' : 'Register Vehicle'}
         </motion.button>
       </form>

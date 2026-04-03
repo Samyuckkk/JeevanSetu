@@ -1,19 +1,38 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, User as UserIcon } from 'lucide-react'
+import { Mail, Lock, User as UserIcon, Loader2 } from 'lucide-react'
 import AuthLayout from '../../components/AuthLayout'
+import { useAuth } from '../../context/AuthContext'
 
 export default function CitizenAuth({ mode }) {
   const isLogin = mode === 'login'
+  const { login, register } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({ name: '', email: '', password: '' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+    setError('')
+  }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log('Citizen Submit:', mode, formData)
-    // Add real API call here
+    setLoading(true)
+    try {
+      if (isLogin) {
+        await login('citizen', { email: formData.email, password: formData.password })
+      } else {
+        await register('citizen', formData)
+      }
+      navigate('/citizen/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Authentication failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -25,6 +44,12 @@ export default function CitizenAuth({ mode }) {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm">
+            {error}
+          </div>
+        )}
+
         <AnimatePresence>
           {!isLogin && (
             <motion.div
@@ -85,8 +110,10 @@ export default function CitizenAuth({ mode }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-600/30 transition-all"
+          disabled={loading}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex justify-center items-center gap-2"
         >
+          {loading && <Loader2 className="w-5 h-5 animate-spin" />}
           {isLogin ? 'Sign In' : 'Create Account'}
         </motion.button>
       </form>

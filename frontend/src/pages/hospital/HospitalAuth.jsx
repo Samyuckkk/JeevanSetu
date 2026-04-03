@@ -1,11 +1,14 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Building2, Mail, Lock, MapPin, Activity, Map, Navigation, HeartPulse } from 'lucide-react'
+import { Building2, Mail, Lock, MapPin, Activity, Map, Navigation, HeartPulse, Loader2 } from 'lucide-react'
 import AuthLayout from '../../components/AuthLayout'
+import { useAuth } from '../../context/AuthContext'
 
 export default function HospitalAuth({ mode }) {
   const isLogin = mode === 'login'
+  const { login, register } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({ 
     name: '', 
     email: '', 
@@ -19,8 +22,13 @@ export default function HospitalAuth({ mode }) {
   })
   const [gettingLocation, setGettingLocation] = useState(false)
   const [locError, setLocError] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+    setError('')
+  }
 
   const handleGetLocation = () => {
     setGettingLocation(true)
@@ -46,14 +54,14 @@ export default function HospitalAuth({ mode }) {
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     let submitData = { ...formData }
     if (!isLogin) {
-      // transform specialists comma separated to array
-      submitData.specialists = submitData.specialists.split(',').map(s => s.trim()).filter(s => s)
-      // group inventory
+      if (typeof submitData.specialists === 'string') {
+        submitData.specialists = submitData.specialists.split(',').map(s => s.trim()).filter(s => s)
+      }
       submitData.inventory = {
         icuBeds: Number(formData.icuBeds),
         ventilators: Number(formData.ventilators),
@@ -66,8 +74,19 @@ export default function HospitalAuth({ mode }) {
       delete submitData.generalBeds
     }
     
-    console.log('Hospital Submit:', mode, submitData)
-    // Add real API call here
+    setLoading(true)
+    try {
+      if (isLogin) {
+        await login('hospital', { email: formData.email, password: formData.password })
+      } else {
+        await register('hospital', submitData)
+      }
+      navigate('/hospital/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Authentication failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -79,6 +98,12 @@ export default function HospitalAuth({ mode }) {
     >
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
         
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm">
+            {error}
+          </div>
+        )}
+
         <AnimatePresence>
           {!isLogin && (
             <motion.div
@@ -222,8 +247,10 @@ export default function HospitalAuth({ mode }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-600/30 transition-all mt-6"
+          disabled={loading}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-600/30 transition-all mt-6 flex justify-center items-center gap-2"
         >
+          {loading && <Loader2 className="w-5 h-5 animate-spin" />}
           {isLogin ? 'Sign In' : 'Register Hospital'}
         </motion.button>
       </form>

@@ -2,6 +2,7 @@ const incidentModel = require("../models/incident.model");
 const citizenModel = require("../models/citizen.model");
 const storageService = require("../services/storage.service");
 const { v4: uuid } = require("uuid");
+const { getIO } = require('../socket');
 
 async function reportIncident(req, res) {
   try {
@@ -51,6 +52,13 @@ async function reportIncident(req, res) {
     });
 
     await user.save();
+
+    // EMIT real-time notification to all active ambulances
+    try {
+      getIO().to('ambulance').emit('incoming_incident', incident);
+    } catch (err) {
+      console.log('Socket mapping failed or no ambulances attached', err);
+    }
 
     res.status(201).json({
       message: "Incident reported successfully",

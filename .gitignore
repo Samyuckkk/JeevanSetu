@@ -1,0 +1,14 @@
+# Python
+ml_service/venv/
+ml_service/__pycache__/
+ml_service/*.pyc
+
+# Node
+node_modules/
+
+# Env
+.env
+*.env
+
+# OS
+.DS_Store
