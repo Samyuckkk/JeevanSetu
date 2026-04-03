@@ -135,7 +135,9 @@ async function registerAmbulance(req, res) {
             ambulance: {
                 id: ambulance._id,
                 vehicleNumber: ambulance.vehicleNumber,
-                type: ambulance.type
+                type: ambulance.type,
+                status: ambulance.status,
+                location: ambulance.location
             }
         })
 
@@ -177,7 +179,9 @@ async function loginAmbulance(req, res) {
             ambulance: {
                 id: ambulance._id,
                 vehicleNumber: ambulance.vehicleNumber,
-                type: ambulance.type
+                type: ambulance.type,
+                status: ambulance.status,
+                location: ambulance.location
             }
         })
 
@@ -226,7 +230,10 @@ async function registerHospital(req, res) {
             hospital: {
                 id: hospital._id,
                 name: hospital.name,
-                email: hospital.email
+                email: hospital.email,
+                location: hospital.location,
+                inventory: hospital.inventory,
+                status: hospital.status
             }
         })
 
@@ -268,7 +275,10 @@ async function loginHospital(req, res) {
             hospital: {
                 id: hospital._id,
                 name: hospital.name,
-                email: hospital.email
+                email: hospital.email,
+                location: hospital.location,
+                inventory: hospital.inventory,
+                status: hospital.status
             }
         })
 

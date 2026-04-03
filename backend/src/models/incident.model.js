@@ -34,6 +34,18 @@ const incidentSchema = new mongoose.Schema({
         default: 'pending'
     },
 
+    transportStatus: {
+        type: String,
+        enum: ['awaiting-acceptance', 'dispatching', 'en-route', 'rerouted', 'arriving', 'completed'],
+        default: 'awaiting-acceptance'
+    },
+
+    arrivalStatus: {
+        type: String,
+        enum: ['not-started', 'incoming', 'arrived'],
+        default: 'not-started'
+    },
+
     assignedAmbulance: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ambulance',
@@ -46,6 +58,42 @@ const incidentSchema = new mongoose.Schema({
         default: null
     },
 
+    selectedHospital: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'hospital',
+        default: null
+    },
+
+    hospitalOptions: [
+        {
+            hospital: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'hospital'
+            },
+            name: String,
+            status: String,
+            location: {
+                lat: Number,
+                lng: Number
+            },
+            distanceKm: Number,
+            capabilityScore: Number,
+            matchesAllRequirements: Boolean,
+            isBestMatch: Boolean,
+            availableResources: {
+                icuBeds: Number,
+                ventilators: Number,
+                generalBeds: Number,
+                specialists: [String]
+            }
+        }
+    ],
+
+    ambulanceLocation: {
+        lat: Number,
+        lng: Number
+    },
+
     vitals: {
         heartRate: Number,
         systolicBP: Number,
@@ -55,12 +103,41 @@ const incidentSchema = new mongoose.Schema({
         symptoms: String
     },
 
+    vitalsUpdatedAt: {
+        type: Date,
+        default: null
+    },
+
+    severityLevel: {
+        type: String,
+        enum: ['stable', 'watch', 'critical'],
+        default: 'stable'
+    },
+
     mlPrediction: {
         icuBeds_Required: Number,
         ventilators_Required: Number,
         generalBeds_Required: Number,
         specialists_Needed: [String]
-    }
+    },
+
+    rerouteHistory: [
+        {
+            fromHospital: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'hospital'
+            },
+            toHospital: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'hospital'
+            },
+            reason: String,
+            triggeredAt: {
+                type: Date,
+                default: Date.now
+            }
+        }
+    ]
 
 }, { timestamps: true })
 

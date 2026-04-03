@@ -3,141 +3,399 @@ const incidentModel = require('../models/incident.model')
 const hospitalModel = require('../models/hospital.model')
 const axios = require('axios')
 const { getIO } = require('../socket')
+const {
+  buildIncidentRealtimePayload,
+  determineSeverity,
+  findClosestStabilizationHospital,
+  getAvailableHospitals,
+  rankHospitalsForIncident,
+  serializeHospitalOption,
+} = require('../services/incident.service')
 
-// Distance helper
-function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-  var R = 6371; // Radius of the earth in km
-  var dLat = (lat2 - lat1) * (Math.PI / 180); 
-  var dLon = (lon2 - lon1) * (Math.PI / 180); 
-  var a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    ; 
-  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-  var d = R * c; // Distance in km
-  return d;
+async function populateIncident(incidentId) {
+  return incidentModel
+    .findById(incidentId)
+    .populate('assignedAmbulance', 'vehicleNumber type status location')
+    .populate('assignedHospital', 'name email location inventory status')
+    .populate('selectedHospital', 'name email location inventory status')
+    .populate('hospitalOptions.hospital', 'name email location inventory status')
+}
+
+function emitHospitalCaseUpdate(eventName, hospitalId, incident, extra = {}) {
+  if (!hospitalId) return
+
+  getIO().to(`hospital_${hospitalId}`).emit(eventName, {
+    incident: buildIncidentRealtimePayload(incident),
+    ...extra,
+  })
+}
+
+function emitAmbulanceCaseUpdate(ambulanceId, incident, extra = {}) {
+  if (!ambulanceId) return
+
+  getIO().to(`ambulance_${ambulanceId}`).emit('ambulance_case_update', {
+    incident: buildIncidentRealtimePayload(incident),
+    ...extra,
+  })
+}
+
+async function getPendingIncidents(req, res) {
+  try {
+    const incidents = await incidentModel
+      .find({ status: 'pending' })
+      .sort({ createdAt: -1 })
+
+    res.status(200).json({
+      incidents: incidents.map((incident) => buildIncidentRealtimePayload(incident)),
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+async function getActiveIncident(req, res) {
+  try {
+    const incident = await incidentModel
+      .findOne({
+        assignedAmbulance: req.user.id,
+        status: { $ne: 'completed' },
+      })
+      .sort({ updatedAt: -1 })
+      .populate('assignedAmbulance', 'vehicleNumber type status location')
+      .populate('assignedHospital', 'name email location inventory status')
+      .populate('selectedHospital', 'name email location inventory status')
+      .populate('hospitalOptions.hospital', 'name email location inventory status')
+
+    res.status(200).json({
+      incident: incident ? buildIncidentRealtimePayload(incident) : null,
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
 }
 
 async function updateLocation(req, res) {
-    try {
-        const { lat, lng } = req.body
-        const ambulance = await ambulanceModel.findByIdAndUpdate(
-            req.user.id,
-            {
-                location: { lat, lng },
-                lastLocationUpdate: new Date()
-            },
-            { new: true }
-        )
-        res.status(200).json({ message: "Location updated", ambulance })
-    } catch (err) {
-        res.status(500).json({ message: err.message })
+  try {
+    const { lat, lng, incidentId } = req.body
+    const location = { lat: Number(lat), lng: Number(lng) }
+
+    const ambulance = await ambulanceModel.findByIdAndUpdate(
+      req.user.id,
+      {
+        location,
+        lastLocationUpdate: new Date(),
+      },
+      { new: true },
+    )
+
+    if (incidentId) {
+      const incident = await incidentModel.findByIdAndUpdate(
+        incidentId,
+        {
+          ambulanceLocation: location,
+        },
+        { new: true },
+      )
+
+      if (incident) {
+        const populatedIncident = await populateIncident(incident._id)
+        emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
+        emitHospitalCaseUpdate(populatedIncident.assignedHospital?._id, populatedIncident)
+      }
     }
+
+    res.status(200).json({ message: 'Location updated', ambulance })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
 }
 
 async function acceptIncident(req, res) {
-    try {
-        const { incidentId } = req.body
-        const incident = await incidentModel.findById(incidentId)
-        if (!incident || incident.status !== 'pending') {
-            return res.status(400).json({ message: "Incident not available." })
-        }
+  try {
+    const { incidentId } = req.body
+    const incident = await incidentModel.findById(incidentId)
 
-        incident.status = 'assigned'
-        incident.assignedAmbulance = req.user.id
-        await incident.save()
-
-        // Inform other ambulances it's taken
-        getIO().to('ambulance').emit('incident_taken', { incidentId })
-
-        res.status(200).json({ message: "Incident Accepted", incident })
-    } catch (err) {
-        res.status(500).json({ message: err.message })
+    if (!incident || incident.status !== 'pending') {
+      return res.status(400).json({ message: 'Incident not available.' })
     }
+
+    incident.status = 'assigned'
+    incident.transportStatus = 'dispatching'
+    incident.assignedAmbulance = req.user.id
+    incident.arrivalStatus = 'not-started'
+    await incident.save()
+
+    const populatedIncident = await populateIncident(incident._id)
+
+    getIO().to('ambulance').emit('incident_taken', { incidentId })
+    emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
+
+    res.status(200).json({
+      message: 'Incident accepted',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
 }
 
 async function predictAllocation(req, res) {
-    try {
-        const { incidentId, vitals } = req.body
+  try {
+    const { incidentId, vitals } = req.body
+    const incident = await incidentModel.findById(incidentId)
 
-        // 1. Hit local ML Service
-        let mlPrediction;
-        try {
-            const response = await axios.post('http://127.0.0.1:8000/predict', vitals)
-            mlPrediction = response.data
-        } catch (mlErr) {
-            console.error("ML Service fails, fallback to default", mlErr.message)
-            mlPrediction = {
-                icuBeds_Required: 0,
-                ventilators_Required: 0,
-                generalBeds_Required: 1,
-                specialists_Needed: ['general']
-            }
-        }
-
-        const incident = await incidentModel.findById(incidentId)
-        if (!incident) return res.status(404).json({ message: "Incident not found" })
-
-        // 2. Save vitals and ml prediction to incident
-        incident.vitals = vitals
-        incident.mlPrediction = mlPrediction
-        
-        // 3. Find Hospital logic
-        const allHospitals = await hospitalModel.find({ status: { $ne: 'offline' } })
-
-        // Filter hospitals that meet criteria
-        let capableHospitals = allHospitals.filter(h => {
-             const inv = h.inventory || {}
-             const meetsIcu = (inv.icuBeds || 0) >= mlPrediction.icuBeds_Required
-             const meetsVent = (inv.ventilators || 0) >= mlPrediction.ventilators_Required
-             const meetsGen = (inv.generalBeds || 0) >= mlPrediction.generalBeds_Required
-             
-             // Check specialists if not just 'general'
-             let meetsSpec = true
-             if (mlPrediction.specialists_Needed && !mlPrediction.specialists_Needed.includes('general')) {
-                 const hSpec = inv.specialists || []
-                 // just needs to match at least one specialized
-                 meetsSpec = mlPrediction.specialists_Needed.some(reqSpec => 
-                     hSpec.map(s => s.toLowerCase()).includes(reqSpec)
-                 )
-             }
-             return meetsIcu && meetsVent && meetsGen && meetsSpec
-        })
-
-        if (capableHospitals.length === 0) {
-            // fallback: any active hospital
-            capableHospitals = allHospitals
-        }
-
-        // 4. Sort by distance (Haversine)
-        capableHospitals.sort((a, b) => {
-            const distA = getDistanceFromLatLonInKm(incident.location.lat, incident.location.lng, a.location.lat, a.location.lng)
-            const distB = getDistanceFromLatLonInKm(incident.location.lat, incident.location.lng, b.location.lat, b.location.lng)
-            return distA - distB
-        })
-
-        const selectedHospital = capableHospitals[0]
-
-        incident.assignedHospital = selectedHospital._id
-        await incident.save()
-
-        // 5. Notify Hospital via Socket.io
-        getIO().to(`hospital_${selectedHospital._id}`).emit('incoming_patient', {
-            incident,
-            eta: "10 mins" // Mock ETA
-        })
-
-        res.status(200).json({ 
-            message: "Prediction and Allocation complete",
-            incident,
-            allocatedHospital: selectedHospital
-        })
-
-    } catch (err) {
-        console.error(err)
-        res.status(500).json({ message: err.message })
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident not found' })
     }
+
+    let mlPrediction
+    try {
+      const response = await axios.post('http://127.0.0.1:8000/predict', vitals)
+      mlPrediction = response.data
+    } catch (mlErr) {
+      console.error('ML Service failed, using fallback allocation', mlErr.message)
+      mlPrediction = {
+        icuBeds_Required: 0,
+        ventilators_Required: 0,
+        generalBeds_Required: 1,
+        specialists_Needed: ['general'],
+      }
+    }
+
+    const allHospitals = await getAvailableHospitals()
+    const rankedHospitals = await rankHospitalsForIncident(
+      { ...incident.toObject(), mlPrediction },
+      allHospitals,
+    )
+    const bestHospitalOption = rankedHospitals[0]
+
+    incident.vitals = {
+      ...vitals,
+      heartRate: Number(vitals.heartRate),
+      systolicBP: Number(vitals.systolicBP),
+      diastolicBP: Number(vitals.diastolicBP),
+      spo2: Number(vitals.spo2),
+      temperature: Number(vitals.temperature),
+    }
+    incident.vitalsUpdatedAt = new Date()
+    incident.mlPrediction = mlPrediction
+    incident.severityLevel = determineSeverity(incident.vitals)
+    incident.hospitalOptions = rankedHospitals
+    incident.selectedHospital = bestHospitalOption?.hospital || null
+    incident.assignedHospital = bestHospitalOption?.hospital || null
+    incident.transportStatus = 'en-route'
+    incident.arrivalStatus = 'incoming'
+    await incident.save()
+
+    const populatedIncident = await populateIncident(incident._id)
+
+    if (populatedIncident.assignedHospital?._id) {
+      emitHospitalCaseUpdate('incoming_patient', populatedIncident.assignedHospital._id, populatedIncident, {
+        eta: '10 mins',
+        rerouted: false,
+      })
+    }
+
+    emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
+
+    res.status(200).json({
+      message: 'Prediction and allocation complete',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+      bestHospital: serializeHospitalOption(rankedHospitals[0]),
+      availableHospitals: rankedHospitals.map(serializeHospitalOption),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: err.message })
+  }
 }
 
-module.exports = { updateLocation, acceptIncident, predictAllocation }
+async function selectHospital(req, res) {
+  try {
+    const { incidentId, hospitalId } = req.body
+    const incident = await incidentModel.findById(incidentId)
+
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+
+    const previousHospitalId = incident.assignedHospital ? String(incident.assignedHospital) : null
+    const nextHospital = await hospitalModel.findById(hospitalId)
+
+    if (!nextHospital) {
+      return res.status(404).json({ message: 'Hospital not found' })
+    }
+
+    incident.selectedHospital = nextHospital._id
+    incident.assignedHospital = nextHospital._id
+    incident.transportStatus = 'en-route'
+    incident.arrivalStatus = 'incoming'
+    await incident.save()
+
+    const populatedIncident = await populateIncident(incident._id)
+
+    if (previousHospitalId && previousHospitalId !== String(nextHospital._id)) {
+      emitHospitalCaseUpdate('patient_rerouted_away', previousHospitalId, populatedIncident, {
+        reason: 'Destination changed by ambulance',
+      })
+    }
+
+    emitHospitalCaseUpdate('incoming_patient', nextHospital._id, populatedIncident, {
+      eta: '10 mins',
+      rerouted: previousHospitalId && previousHospitalId !== String(nextHospital._id),
+    })
+    emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
+
+    res.status(200).json({
+      message: 'Hospital selected',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+      selectedHospital: serializeHospitalOption(
+        populatedIncident.hospitalOptions.find(
+          (option) => String(option.hospital?._id || option.hospital) === String(nextHospital._id),
+        ) || {
+          hospital: nextHospital._id,
+          name: nextHospital.name,
+          status: nextHospital.status,
+          location: nextHospital.location,
+          availableResources: nextHospital.inventory,
+        },
+      ),
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+async function streamVitals(req, res) {
+  try {
+    const { incidentId, vitals, ambulanceLocation } = req.body
+    const incident = await incidentModel.findById(incidentId)
+
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+
+    incident.vitals = {
+      ...incident.vitals,
+      ...vitals,
+      heartRate: Number(vitals.heartRate),
+      systolicBP: Number(vitals.systolicBP),
+      diastolicBP: Number(vitals.diastolicBP),
+      spo2: Number(vitals.spo2),
+      temperature: Number(vitals.temperature),
+    }
+    incident.vitalsUpdatedAt = new Date()
+    incident.severityLevel = determineSeverity(incident.vitals)
+
+    if (ambulanceLocation?.lat && ambulanceLocation?.lng) {
+      incident.ambulanceLocation = {
+        lat: Number(ambulanceLocation.lat),
+        lng: Number(ambulanceLocation.lng),
+      }
+    }
+
+    let rerouted = false
+    let rerouteReason = ''
+    let previousHospitalId = incident.assignedHospital ? String(incident.assignedHospital) : null
+
+    if (incident.severityLevel === 'critical') {
+      const stabilizationHospital = await findClosestStabilizationHospital(
+        incident,
+        incident.assignedHospital,
+      )
+
+      if (
+        stabilizationHospital &&
+        String(stabilizationHospital.hospital) !== previousHospitalId
+      ) {
+        rerouted = true
+        rerouteReason = 'Vitals turned critical. Redirecting to the nearest stabilisation-ready hospital.'
+        incident.rerouteHistory.push({
+          fromHospital: incident.assignedHospital,
+          toHospital: stabilizationHospital.hospital,
+          reason: rerouteReason,
+        })
+        incident.assignedHospital = stabilizationHospital.hospital
+        incident.selectedHospital = stabilizationHospital.hospital
+        incident.transportStatus = 'rerouted'
+      }
+    }
+
+    await incident.save()
+    const populatedIncident = await populateIncident(incident._id)
+
+    if (rerouted && previousHospitalId) {
+      emitHospitalCaseUpdate('patient_rerouted_away', previousHospitalId, populatedIncident, {
+        reason: rerouteReason,
+      })
+    }
+
+    emitHospitalCaseUpdate(
+      rerouted ? 'patient_rerouted' : 'patient_vitals_update',
+      populatedIncident.assignedHospital?._id,
+      populatedIncident,
+      {
+        reason: rerouteReason,
+      },
+    )
+    emitAmbulanceCaseUpdate(req.user.id, populatedIncident, {
+      rerouted,
+      reason: rerouteReason,
+    })
+
+    res.status(200).json({
+      message: rerouted ? 'Vitals streamed and route updated' : 'Vitals streamed',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+      rerouted,
+      reason: rerouteReason,
+      selectedHospital: populatedIncident.assignedHospital
+        ? {
+            hospitalId: populatedIncident.assignedHospital._id,
+            name: populatedIncident.assignedHospital.name,
+            location: populatedIncident.assignedHospital.location,
+            status: populatedIncident.assignedHospital.status,
+            availableResources: populatedIncident.assignedHospital.inventory,
+          }
+        : null,
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+async function markArrival(req, res) {
+  try {
+    const { incidentId } = req.body
+    const incident = await incidentModel.findById(incidentId)
+
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+
+    incident.arrivalStatus = 'arrived'
+    incident.transportStatus = 'arriving'
+    await incident.save()
+
+    const populatedIncident = await populateIncident(incident._id)
+    emitHospitalCaseUpdate('patient_arrived', populatedIncident.assignedHospital?._id, populatedIncident)
+    emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
+
+    res.status(200).json({
+      message: 'Hospital arrival marked',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+module.exports = {
+  acceptIncident,
+  getActiveIncident,
+  getPendingIncidents,
+  markArrival,
+  predictAllocation,
+  selectHospital,
+  streamVitals,
+  updateLocation,
+}

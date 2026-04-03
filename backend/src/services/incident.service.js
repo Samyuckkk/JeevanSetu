@@ -1,0 +1,201 @@
+const hospitalModel = require('../models/hospital.model')
+
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * (Math.PI / 180)
+  const dLon = (lon2 - lon1) * (Math.PI / 180)
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
+
+function normalizeSpecialists(list = []) {
+  return list
+    .filter(Boolean)
+    .map((item) => String(item).trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function determineSeverity(vitals = {}) {
+  const heartRate = Number(vitals.heartRate)
+  const systolicBP = Number(vitals.systolicBP)
+  const diastolicBP = Number(vitals.diastolicBP)
+  const spo2 = Number(vitals.spo2)
+  const temperature = Number(vitals.temperature)
+
+  const critical =
+    spo2 < 90 ||
+    systolicBP < 90 ||
+    diastolicBP < 60 ||
+    heartRate < 45 ||
+    heartRate > 140 ||
+    temperature >= 103
+
+  if (critical) return 'critical'
+
+  const watch =
+    spo2 < 94 ||
+    systolicBP < 100 ||
+    diastolicBP < 70 ||
+    heartRate < 55 ||
+    heartRate > 120 ||
+    temperature >= 100.4
+
+  return watch ? 'watch' : 'stable'
+}
+
+function buildRequirementSummary(mlPrediction = {}) {
+  return {
+    icuBeds: Number(mlPrediction.icuBeds_Required || 0),
+    ventilators: Number(mlPrediction.ventilators_Required || 0),
+    generalBeds: Number(mlPrediction.generalBeds_Required || 0),
+    specialists: mlPrediction.specialists_Needed || ['general'],
+  }
+}
+
+function buildHospitalOption(hospital, incidentLocation, requirements = {}) {
+  const inventory = hospital.inventory || {}
+  const distanceKm = getDistanceFromLatLonInKm(
+    incidentLocation.lat,
+    incidentLocation.lng,
+    hospital.location.lat,
+    hospital.location.lng,
+  )
+
+  const hospitalSpecialists = normalizeSpecialists(inventory.specialists)
+  const requiredSpecialists = normalizeSpecialists(requirements.specialists)
+
+  const meetsIcu = (inventory.icuBeds || 0) >= (requirements.icuBeds || 0)
+  const meetsVent = (inventory.ventilators || 0) >= (requirements.ventilators || 0)
+  const meetsGeneral = (inventory.generalBeds || 0) >= (requirements.generalBeds || 0)
+
+  const needsSpecificSpecialist =
+    requiredSpecialists.length > 0 && !requiredSpecialists.includes('general')
+  const meetsSpecialists = needsSpecificSpecialist
+    ? requiredSpecialists.some((specialist) => hospitalSpecialists.includes(specialist))
+    : true
+
+  const matchesAllRequirements = meetsIcu && meetsVent && meetsGeneral && meetsSpecialists
+  const capabilityScore =
+    (meetsIcu ? 3 : 0) +
+    (meetsVent ? 3 : 0) +
+    (meetsGeneral ? 2 : 0) +
+    (meetsSpecialists ? 2 : 0)
+
+  return {
+    hospital: hospital._id,
+    name: hospital.name,
+    status: hospital.status,
+    location: hospital.location,
+    distanceKm: Number(distanceKm.toFixed(2)),
+    capabilityScore,
+    matchesAllRequirements,
+    availableResources: {
+      icuBeds: inventory.icuBeds || 0,
+      ventilators: inventory.ventilators || 0,
+      generalBeds: inventory.generalBeds || 0,
+      specialists: inventory.specialists || [],
+    },
+  }
+}
+
+async function rankHospitalsForIncident(incident, hospitals) {
+  const requirements = buildRequirementSummary(incident.mlPrediction)
+  const ranked = hospitals
+    .filter((hospital) => hospital.status !== 'offline')
+    .map((hospital) => buildHospitalOption(hospital, incident.location, requirements))
+    .sort((a, b) => {
+      if (b.matchesAllRequirements !== a.matchesAllRequirements) {
+        return Number(b.matchesAllRequirements) - Number(a.matchesAllRequirements)
+      }
+
+      if (b.capabilityScore !== a.capabilityScore) {
+        return b.capabilityScore - a.capabilityScore
+      }
+
+      return a.distanceKm - b.distanceKm
+    })
+
+  return ranked.map((option, index) => ({ ...option, isBestMatch: index === 0 }))
+}
+
+async function getAvailableHospitals() {
+  return hospitalModel.find({ status: { $ne: 'offline' } }).sort({ createdAt: 1 })
+}
+
+async function findClosestStabilizationHospital(incident, currentHospitalId) {
+  const hospitals = await hospitalModel.find({ status: 'active' })
+  const candidates = hospitals
+    .map((hospital) => buildHospitalOption(hospital, incident.ambulanceLocation || incident.location, {
+      icuBeds: 0,
+      ventilators: 0,
+      generalBeds: 1,
+      specialists: ['general'],
+    }))
+    .filter((option) => option.availableResources.generalBeds > 0 || option.availableResources.icuBeds > 0)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+
+  const currentHospitalIdString = currentHospitalId ? String(currentHospitalId) : null
+  const alternative = candidates.find((candidate) => String(candidate.hospital) !== currentHospitalIdString)
+
+  return alternative || candidates[0] || null
+}
+
+function serializeHospitalOption(option) {
+  return {
+    hospitalId: option.hospital?._id || option.hospital,
+    name: option.name || option.hospital?.name,
+    status: option.status || option.hospital?.status,
+    location: option.location || option.hospital?.location,
+    distanceKm: option.distanceKm,
+    capabilityScore: option.capabilityScore,
+    matchesAllRequirements: option.matchesAllRequirements,
+    isBestMatch: option.isBestMatch,
+    availableResources: option.availableResources,
+  }
+}
+
+function buildIncidentRealtimePayload(incident) {
+  const hospitalOptions = (incident.hospitalOptions || []).map(serializeHospitalOption)
+
+  return {
+    _id: incident._id,
+    aidType: incident.aidType,
+    description: incident.description,
+    image: incident.image,
+    location: incident.location,
+    ambulanceLocation: incident.ambulanceLocation,
+    status: incident.status,
+    transportStatus: incident.transportStatus,
+    arrivalStatus: incident.arrivalStatus,
+    severityLevel: incident.severityLevel,
+    vitals: incident.vitals,
+    vitalsUpdatedAt: incident.vitalsUpdatedAt,
+    mlPrediction: incident.mlPrediction,
+    requirements: buildRequirementSummary(incident.mlPrediction),
+    symptoms: incident.vitals?.symptoms || '',
+    assignedAmbulance: incident.assignedAmbulance,
+    assignedHospital: incident.assignedHospital,
+    selectedHospital: incident.selectedHospital,
+    hospitalOptions,
+    rerouteHistory: incident.rerouteHistory || [],
+    createdAt: incident.createdAt,
+    updatedAt: incident.updatedAt,
+  }
+}
+
+module.exports = {
+  buildIncidentRealtimePayload,
+  buildRequirementSummary,
+  determineSeverity,
+  findClosestStabilizationHospital,
+  getAvailableHospitals,
+  getDistanceFromLatLonInKm,
+  rankHospitalsForIncident,
+  serializeHospitalOption,
+}
