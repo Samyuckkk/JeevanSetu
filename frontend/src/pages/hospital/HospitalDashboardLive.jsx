@@ -64,6 +64,17 @@ export default function HospitalDashboardLive() {
   }, [API_URL])
 
   useEffect(() => {
+    if (user?.inventory) {
+      setInventory({
+        icuBeds: user.inventory.icuBeds ?? 0,
+        ventilators: user.inventory.ventilators ?? 0,
+        generalBeds: user.inventory.generalBeds ?? 0,
+        specialists: Array.isArray(user.inventory.specialists) ? user.inventory.specialists.join(', ') : '',
+      })
+    }
+  }, [user])
+
+  useEffect(() => {
     if (!hospitalId) return undefined
 
     const socket = io('http://localhost:3000', { withCredentials: true })

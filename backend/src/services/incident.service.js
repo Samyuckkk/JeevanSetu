@@ -1,4 +1,5 @@
 const hospitalModel = require('../models/hospital.model')
+const incidentModel = require('../models/incident.model')
 
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -128,9 +129,42 @@ function buildHospitalOption(hospital, incidentLocation, requirements = {}) {
   }
 }
 
+async function getEffectiveHospitals(hospitals) {
+  const activeIncidents = await incidentModel.find({
+    status: { $ne: 'completed' },
+    transportStatus: { $in: ['dispatching', 'en-route', 'rerouted'] },
+    arrivalStatus: { $ne: 'arrived' },
+    assignedHospital: { $ne: null }
+  });
+
+  const reservedMap = {};
+  for (const inc of activeIncidents) {
+    const hId = String(inc.assignedHospital);
+    if (!reservedMap[hId]) {
+      reservedMap[hId] = { icuBeds: 0, ventilators: 0, generalBeds: 0 };
+    }
+    const reqs = buildRequirementSummary(inc.mlPrediction);
+    reservedMap[hId].icuBeds += (reqs.icuBeds || 0);
+    reservedMap[hId].ventilators += (reqs.ventilators || 0);
+    reservedMap[hId].generalBeds += (reqs.generalBeds || 0);
+  }
+
+  return hospitals.map(h => {
+    const hObj = h.toObject ? h.toObject() : { ...h };
+    const hId = String(hObj._id);
+    if (reservedMap[hId] && hObj.inventory) {
+      hObj.inventory.icuBeds = Math.max(0, (hObj.inventory.icuBeds || 0) - reservedMap[hId].icuBeds);
+      hObj.inventory.ventilators = Math.max(0, (hObj.inventory.ventilators || 0) - reservedMap[hId].ventilators);
+      hObj.inventory.generalBeds = Math.max(0, (hObj.inventory.generalBeds || 0) - reservedMap[hId].generalBeds);
+    }
+    return hObj;
+  });
+}
+
 async function rankHospitalsForIncident(incident, hospitals) {
+  const effectiveHospitals = await getEffectiveHospitals(hospitals);
   const requirements = buildRequirementSummary(incident.mlPrediction)
-  const ranked = hospitals
+  const ranked = effectiveHospitals
     .filter((hospital) => hospital.status !== 'offline')
     .map((hospital) => buildHospitalOption(hospital, incident.location, requirements))
     .sort((a, b) => {
@@ -168,7 +202,8 @@ function canHospitalStabilize(hospitalLike, severityLevel = 'stable') {
 
 async function findClosestStabilizationHospital(incident, currentHospitalId, severityLevel = 'critical') {
   const hospitals = await hospitalModel.find({ status: 'active' })
-  const candidates = hospitals
+  const effectiveHospitals = await getEffectiveHospitals(hospitals);
+  const candidates = effectiveHospitals
     .map((hospital) => buildHospitalOption(hospital, incident.ambulanceLocation || incident.location, {
       icuBeds: 0,
       ventilators: 0,

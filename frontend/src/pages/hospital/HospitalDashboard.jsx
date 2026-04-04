@@ -23,10 +23,10 @@ export default function HospitalDashboard() {
   const { user, API_URL, logout } = useAuth()
   
   const [inventory, setInventory] = useState({
-    icuBeds: 10,
-    ventilators: 5,
-    generalBeds: 50,
-    specialists: 'cardiac, neuro'
+    icuBeds: user?.inventory?.icuBeds || 0,
+    ventilators: user?.inventory?.ventilators || 0,
+    generalBeds: user?.inventory?.generalBeds || 0,
+    specialists: user?.inventory?.specialists?.join(', ') || 'general'
   })
   
   const [savingInv, setSavingInv] = useState(false)

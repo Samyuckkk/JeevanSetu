@@ -4,7 +4,8 @@ import { Navigate } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import axios from 'axios'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Ambulance, MapPin, Activity, Stethoscope, ChevronRight, CheckCircle2, Navigation2, Loader2, Hospital } from 'lucide-react'
+import { Ambulance, MapPin, Activity, Stethoscope, ChevronRight, CheckCircle2, Navigation2, Loader2, Hospital, AlertTriangle } from 'lucide-react'
+import { useJsApiLoader, GoogleMap, DirectionsRenderer } from '@react-google-maps/api'
 
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
@@ -32,6 +33,54 @@ export default function AmbulanceDashboard() {
   const [allocatedHospital, setAllocatedHospital] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  })
+
+  const [directionsResponse, setDirectionsResponse] = useState(null)
+  const [distance, setDistance] = useState('')
+  const [duration, setDuration] = useState('')
+  const [routeIndex, setRouteIndex] = useState(0)
+
+  const calculateRoute = async (destinationHospital) => {
+    if (!activeIncident || !destinationHospital || !window.google) return
+    const directionsService = new window.google.maps.DirectionsService()
+    const origin = { lat: activeIncident.location?.lat, lng: activeIncident.location?.lng }
+    const destination = { lat: destinationHospital.location?.lat, lng: destinationHospital.location?.lng }
+    try {
+      const results = await directionsService.route({
+        origin,
+        destination,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+        provideRouteAlternatives: true
+      })
+      setDirectionsResponse(results)
+      setDistance(results.routes[0].legs[0].distance.text)
+      setDuration(results.routes[0].legs[0].duration.text)
+      setRouteIndex(0)
+    } catch (e) {
+      console.error("Directions requests failed", e)
+    }
+  }
+
+  useEffect(() => {
+    if (allocatedHospital && activeIncident && isLoaded) {
+      calculateRoute(allocatedHospital)
+    }
+  }, [allocatedHospital, activeIncident, isLoaded])
+
+  const handleReroute = () => {
+    if (directionsResponse && directionsResponse.routes.length > 1) {
+      const nextIndex = (routeIndex + 1) % directionsResponse.routes.length;
+      setRouteIndex(nextIndex);
+      setDistance(directionsResponse.routes[nextIndex].legs[0].distance.text);
+      setDuration(directionsResponse.routes[nextIndex].legs[0].duration.text);
+    } else {
+      alert("No alternate routes available at this moment.");
+    }
+  }
+
   if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
 
   useEffect(() => {
@@ -49,6 +98,9 @@ export default function AmbulanceDashboard() {
       setLoading(true)
       const res = await axios.post(`${API_URL}/ambulance/accept-incident`, { incidentId: incident._id })
       setActiveIncident(res.data.incident)
+      if (res.data.allocatedHospital) {
+        setAllocatedHospital(res.data.allocatedHospital)
+      }
       setIncidents([])
     } catch(err) {
       alert("Failed to accept or already taken.")
@@ -265,11 +317,42 @@ export default function AmbulanceDashboard() {
                   </div>
                   
                   <div className="w-full md:w-1/3 flex flex-col gap-4">
-                     <div className="aspect-square bg-white/5 rounded-3xl border border-white/10 flex flex-col items-center justify-center p-6 text-center mb-4">
-                        <Hospital className="w-12 h-12 text-emerald-400 mb-3 opacity-50" />
-                        <h4 className="text-xl font-bold">ETA: 08:34s</h4>
-                        <p className="text-xs text-slate-500 mt-1 uppercase font-bold">Optimal Route Generated</p>
-                     </div>
+                        <div className="bg-white/5 rounded-3xl border border-white/10 flex flex-col p-4 w-full mb-4 relative min-h-[300px]">
+                           {isLoaded && directionsResponse ? (
+                             <>
+                               <div className="absolute top-2 right-2 z-10 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-bold font-mono text-white flex gap-3 shadow-lg">
+                                 <span>ETA: {duration}</span>
+                                 <span className="text-emerald-400">{distance}</span>
+                               </div>
+                               <GoogleMap
+                                 mapContainerStyle={{ width: '100%', height: '100%', borderRadius: '1.2rem' }}
+                                 zoom={14}
+                                 center={{ lat: activeIncident.location?.lat, lng: activeIncident.location?.lng }}
+                                 options={{ disableDefaultUI: true, zoomControl: true }}
+                               >
+                                 <DirectionsRenderer directions={directionsResponse} routeIndex={routeIndex} options={{ suppressMarkers: false }} />
+                               </GoogleMap>
+                             </>
+                           ) : (
+                             <div className="w-full h-full min-h-[300px] flex flex-col justify-center items-center">
+                               <Loader2 className="w-8 h-8 animate-spin text-emerald-400 mb-2"/>
+                               <p className="text-xs font-bold text-slate-400 uppercase">Generating Navigation...</p>
+                             </div>
+                           )}
+                        </div>
+                        
+                        {activeIncident?.isHighSeverityTrauma && (
+                           <div className="bg-rose-500/20 text-rose-300 border border-rose-500/30 p-3 rounded-xl mb-4 text-xs font-bold flex gap-2 items-center">
+                             <AlertTriangle className="w-5 h-5 shrink-0"/>
+                             CRITICAL TRAUMA CASE. ROUTING AUTO-OVERRIDDEN TO LEVEL 1 CENTER.
+                           </div>
+                        )}
+
+                        <div className="flex gap-3 mb-4">
+                           <button onClick={handleReroute} className="flex-1 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold text-sm rounded-xl transition-colors border border-white/10 items-center justify-center flex gap-2">
+                             <AlertTriangle className="w-4 h-4 text-amber-400"/> Road Blocked (Detour)
+                           </button>
+                        </div>
 
                      <button 
                        onClick={() => { setActiveIncident(null); setAllocatedHospital(null); setVitals({heartRate:80, systolicBP:120, diastolicBP:80, spo2:98, temperature:98.6, symptoms:'' })}} 

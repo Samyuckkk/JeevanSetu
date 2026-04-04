@@ -10,6 +10,7 @@ const {
   determineSeverity,
   findClosestStabilizationHospital,
   getAvailableHospitals,
+  getDistanceFromLatLonInKm,
   rankHospitalsForIncident,
   serializeHospitalOption,
 } = require('../services/incident.service')
@@ -134,19 +135,68 @@ async function acceptIncident(req, res) {
     }
 
     incident.status = 'assigned'
-    incident.transportStatus = 'dispatching'
     incident.assignedAmbulance = req.user.id
     incident.arrivalStatus = 'not-started'
+
+    let preAllocatedHospital = null
+
+    if (incident.isHighSeverityTrauma) {
+      const level1Hospitals = await hospitalModel.find({ traumaLevel: 1, status: { $ne: 'offline' } })
+      if (level1Hospitals.length > 0) {
+        let closest = level1Hospitals[0]
+        let minDistance = getDistanceFromLatLonInKm(
+          incident.location.lat, incident.location.lng,
+          closest.location.lat, closest.location.lng
+        )
+        for (let i=1; i<level1Hospitals.length; i++) {
+          const dist = getDistanceFromLatLonInKm(
+            incident.location.lat, incident.location.lng,
+            level1Hospitals[i].location.lat, level1Hospitals[i].location.lng
+          )
+          if (dist < minDistance) {
+            minDistance = dist
+            closest = level1Hospitals[i]
+          }
+        }
+        preAllocatedHospital = closest
+        
+        incident.selectedHospital = closest._id
+        incident.assignedHospital = closest._id
+        incident.transportStatus = 'en-route'
+        incident.arrivalStatus = 'incoming'
+        incident.severityLevel = 'critical'
+      } else {
+        incident.transportStatus = 'dispatching'
+      }
+    } else {
+      incident.transportStatus = 'dispatching'
+    }
+
     await incident.save()
 
     const populatedIncident = await populateIncident(incident._id)
 
     getIO().to('ambulance').emit('incident_taken', { incidentId })
+    
+    if (preAllocatedHospital) {
+      emitHospitalCaseUpdate('incoming_patient', preAllocatedHospital._id, populatedIncident, {
+        eta: '10 mins',
+        rerouted: false,
+      })
+    }
+    
     emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
 
     res.status(200).json({
       message: 'Incident accepted',
       incident: buildIncidentRealtimePayload(populatedIncident),
+      allocatedHospital: preAllocatedHospital ? serializeHospitalOption({
+        hospital: preAllocatedHospital,
+        distanceKm: getDistanceFromLatLonInKm(incident.location.lat, incident.location.lng, preAllocatedHospital.location.lat, preAllocatedHospital.location.lng),
+        capabilityScore: 10,
+        matchesAllRequirements: true,
+        availableResources: preAllocatedHospital.inventory
+      }) : null
     })
   } catch (err) {
     res.status(500).json({ message: err.message })

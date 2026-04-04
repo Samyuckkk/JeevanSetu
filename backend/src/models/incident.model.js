@@ -137,7 +137,16 @@ const incidentSchema = new mongoose.Schema({
                 default: Date.now
             }
         }
-    ]
+    ],
+
+    isHighSeverityTrauma: {
+        type: Boolean,
+        default: false
+    },
+
+    traumaSeverityAssessment: {
+        type: String
+    }
 
 }, { timestamps: true })
 

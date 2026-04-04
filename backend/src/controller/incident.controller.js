@@ -3,6 +3,9 @@ const citizenModel = require("../models/citizen.model");
 const storageService = require("../services/storage.service");
 const { v4: uuid } = require("uuid");
 const { getIO } = require('../socket');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function reportIncident(req, res) {
   try {
@@ -31,6 +34,36 @@ async function reportIncident(req, res) {
       });
     }
 
+    let isHighSeverityTrauma = false;
+    let traumaSeverityAssessment = "No AI analysis performed.";
+
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 300,
+        }
+      });
+      
+      const prompt = "Analyze this image of an incident. Does it appear to be a high-severity trauma case (e.g. major car accident, severe visible wound, uncontrollable bleeding)? Respond with a JSON object containing exactly two keys: 'isHighSeverity' (boolean) and 'assessment' (string explaining in 1-2 short sentences why).";
+      
+      const imagePart = {
+        inlineData: {
+          data: req.file.buffer.toString('base64'),
+          mimeType: req.file.mimetype || "image/jpeg"
+        }
+      };
+
+      const result = await model.generateContent([prompt, imagePart]);
+      const aiContent = JSON.parse(result.response.text());
+      
+      isHighSeverityTrauma = aiContent.isHighSeverity === true;
+      traumaSeverityAssessment = aiContent.assessment || "Analysis complete.";
+    } catch (aiErr) {
+      console.error("Gemini processing failed:", aiErr);
+    }
+
     const incident = await incidentModel.create({
       reportedBy: req.user.id,
       image: uploadResult.url,
@@ -40,6 +73,8 @@ async function reportIncident(req, res) {
         lng: Number(lng),
       },
       description,
+      isHighSeverityTrauma,
+      traumaSeverityAssessment
     });
 
     const user = await citizenModel.findById(req.user.id);

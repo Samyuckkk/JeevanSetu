@@ -53,6 +53,12 @@ const hospitalSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'full', 'offline'],
         default: 'active'
+    },
+
+    traumaLevel: {
+        type: Number,
+        enum: [1, 2, 3],
+        default: 3
     }
 
 }, { timestamps: true })
