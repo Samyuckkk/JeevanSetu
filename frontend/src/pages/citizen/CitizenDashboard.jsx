@@ -168,7 +168,7 @@ export default function CitizenDashboard() {
                             <Camera className="w-8 h-8 text-blue-500" />
                         </div>
                         <p className="text-slate-600 font-semibold">Tap to capture incident</p>
-                        <p className="text-slate-400 text-xs mt-1">Camera or Gallery</p>
+                        <p className="text-slate-400 text-xs mt-1">Camera Only</p>
                       </div>
                     )}
                   </div>

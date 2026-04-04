@@ -65,6 +65,21 @@ function normalizeHospital(hospital, fallbackOptions = []) {
   }
 }
 
+function ensureStringList(value, fallback = []) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).map((item) => String(item))
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  return fallback
+}
+
 export default function AmbulanceDashboardLive() {
   const { user, loading: authLoading, API_URL, logout } = useAuth()
   const ambulanceUserId = user?.id || user?._id || null
@@ -100,6 +115,40 @@ export default function AmbulanceDashboardLive() {
     ambulanceLocationRef.current = ambulanceLocation
   }, [ambulanceLocation])
 
+  const resetMissionState = () => {
+    activeIncidentRef.current = null
+    vitalsRef.current = initialVitals
+    setActiveIncident(null)
+    setVitals(initialVitals)
+    setHospitalOptions([])
+    setBestHospital(null)
+    setSelectedHospital(null)
+    setRouteAlert('')
+    setStreaming(false)
+  }
+
+  const syncMissionState = (incident, fallbackHospital = null) => {
+    if (!incident) {
+      resetMissionState()
+      return
+    }
+
+    const nextVitals = incident.vitals || initialVitals
+    const nextHospitalOptions = incident.hospitalOptions || []
+    const normalizedAssignedHospital = normalizeHospital(
+      fallbackHospital || incident.assignedHospital || incident.selectedHospital,
+      nextHospitalOptions,
+    )
+
+    activeIncidentRef.current = incident
+    vitalsRef.current = nextVitals
+    setActiveIncident(incident)
+    setVitals(nextVitals)
+    setHospitalOptions(nextHospitalOptions)
+    setSelectedHospital(normalizedAssignedHospital)
+    setBestHospital(nextHospitalOptions.find((option) => option.isBestMatch) || normalizedAssignedHospital)
+  }
+
   useEffect(() => {
     if (!user) return
     const hydrate = async () => {
@@ -113,16 +162,7 @@ export default function AmbulanceDashboardLive() {
         setRecentIncidents(activeRes.data.recentIncidents || [])
 
         if (activeRes.data.incident) {
-          const currentIncident = activeRes.data.incident
-          setActiveIncident(currentIncident)
-          setVitals(currentIncident.vitals || initialVitals)
-          setHospitalOptions(currentIncident.hospitalOptions || [])
-          const normalizedAssignedHospital = normalizeHospital(
-            currentIncident.assignedHospital || currentIncident.selectedHospital,
-            currentIncident.hospitalOptions || [],
-          )
-          setSelectedHospital(normalizedAssignedHospital)
-          setBestHospital((currentIncident.hospitalOptions || []).find((option) => option.isBestMatch) || normalizedAssignedHospital)
+          syncMissionState(activeRes.data.incident)
         }
       } catch (error) {
         console.error('Failed to load ambulance dashboard state', error)
@@ -186,21 +226,11 @@ export default function AmbulanceDashboardLive() {
 
     socket.on('ambulance_case_update', ({ incident, rerouted, reason }) => {
       if (incident.status === 'completed') return
-      setActiveIncident(incident)
-      setHospitalOptions(incident.hospitalOptions || [])
       setRecentIncidents((prev) => [
         incident,
         ...prev.filter((item) => item._id !== incident._id),
       ].slice(0, 10))
-      const normalizedAssignedHospital = normalizeHospital(
-        incident.assignedHospital || incident.selectedHospital,
-        incident.hospitalOptions || [],
-      )
-      setSelectedHospital(normalizedAssignedHospital)
-      setBestHospital((incident.hospitalOptions || []).find((option) => option.isBestMatch) || normalizedAssignedHospital)
-      if (incident.vitals) {
-        setVitals(incident.vitals)
-      }
+      syncMissionState(incident)
       if (rerouted && reason) {
         setRouteAlert(reason)
       }
@@ -254,7 +284,7 @@ export default function AmbulanceDashboardLive() {
       const response = await axios.post(`${API_URL}/ambulance/accept-incident`, {
         incidentId: incident._id,
       })
-      setActiveIncident(response.data.incident)
+      syncMissionState(response.data.incident, response.data.allocatedHospital)
       setIncidents((prev) => prev.filter((item) => item._id !== incident._id))
       setRouteAlert('')
     } catch (error) {
@@ -281,7 +311,7 @@ export default function AmbulanceDashboardLive() {
         },
       })
 
-      setActiveIncident(response.data.incident)
+      syncMissionState(response.data.incident, response.data.bestHospital)
       setHospitalOptions(response.data.availableHospitals || [])
       setBestHospital(response.data.bestHospital || null)
       setSelectedHospital(response.data.bestHospital || null)
@@ -300,7 +330,7 @@ export default function AmbulanceDashboardLive() {
         incidentId: activeIncident._id,
         hospitalId,
       })
-      setActiveIncident(response.data.incident)
+      syncMissionState(response.data.incident, response.data.selectedHospital)
       setSelectedHospital(response.data.selectedHospital)
       setRouteAlert('')
     } catch (error) {
@@ -326,13 +356,7 @@ export default function AmbulanceDashboardLive() {
 
   const resetMission = async () => {
     if (!activeIncident) {
-      setActiveIncident(null)
-      setVitals(initialVitals)
-      setHospitalOptions([])
-      setBestHospital(null)
-      setSelectedHospital(null)
-      setRouteAlert('')
-      setStreaming(false)
+      resetMissionState()
       return
     }
     try {
@@ -340,13 +364,7 @@ export default function AmbulanceDashboardLive() {
       await axios.post(`${API_URL}/ambulance/complete-incident`, {
         incidentId: activeIncident._id,
       })
-      setActiveIncident(null)
-      setVitals(initialVitals)
-      setHospitalOptions([])
-      setBestHospital(null)
-      setSelectedHospital(null)
-      setRouteAlert('')
-      setStreaming(false)
+      resetMissionState()
     } catch (err) {
       console.error('Failed to complete incident on backend', err)
       alert('Failed to clear mission. Please try again.')
@@ -532,7 +550,7 @@ export default function AmbulanceDashboardLive() {
                     <div className="mt-4 rounded-xl bg-white p-4">
                       <p className="mb-1 text-xs font-bold uppercase text-gray-500">Hospital requirement summary</p>
                       <p className="text-sm font-semibold text-gray-700">
-                        Specialists: {activeIncident.mlPrediction?.specialists_Needed?.join(', ') || 'general'}
+                        Specialists: {ensureStringList(activeIncident.mlPrediction?.specialists_Needed, ['general']).join(', ')}
                       </p>
                       <p className="text-sm font-semibold text-gray-700">
                         Beds: ICU {activeIncident.mlPrediction?.icuBeds_Required || 0}, Vent {activeIncident.mlPrediction?.ventilators_Required || 0}, General {activeIncident.mlPrediction?.generalBeds_Required || 0}
@@ -575,7 +593,7 @@ export default function AmbulanceDashboardLive() {
                           ICU {hospital.availableResources?.icuBeds || 0} | Vent {hospital.availableResources?.ventilators || 0} | General {hospital.availableResources?.generalBeds || 0}
                         </p>
                         <p className="mt-1 text-sm text-gray-600">
-                          Specialists: {hospital.availableResources?.specialists?.join(', ') || 'general'}
+                          Specialists: {ensureStringList(hospital.availableResources?.specialists, ['general']).join(', ')}
                         </p>
                         <button
                           onClick={() => handleSelectHospital(hospital.hospitalId)}

@@ -100,7 +100,7 @@ async function updateLocation(req, res) {
         location,
         lastLocationUpdate: new Date(),
       },
-      { returnDocument: 'after' },
+      { new: true },
     )
 
     if (incidentId) {
@@ -109,18 +109,19 @@ async function updateLocation(req, res) {
         {
           ambulanceLocation: location,
         },
-        { returnDocument: 'after' },
+        { new: true },
       )
 
       if (incident) {
         const populatedIncident = await populateIncident(incident._id)
         emitAmbulanceCaseUpdate(req.user.id, populatedIncident)
-        emitHospitalCaseUpdate(populatedIncident.assignedHospital?._id, populatedIncident)
+        emitHospitalCaseUpdate('patient_vitals_update', populatedIncident.assignedHospital?._id, populatedIncident)
       }
     }
 
     res.status(200).json({ message: 'Location updated', ambulance })
   } catch (err) {
+    console.error('updateLocation error:', err.message)
     res.status(500).json({ message: err.message })
   }
 }
