@@ -3,8 +3,11 @@ import numpy as np
 import xgboost as xgb
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, accuracy_score
 import joblib
+import json
+import os
+from datetime import datetime
 
 def generate_synthetic_data(num_samples=2000):
     np.random.seed(42)
@@ -77,7 +80,6 @@ def train_model():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     print("Training Multi-Output XGBoost model...")
-    # Wrap XGBClassifier in MultiOutputClassifier for predicting multiple binary targets
     base_model = xgb.XGBClassifier(
         n_estimators=100,
         learning_rate=0.1,
@@ -94,10 +96,29 @@ def train_model():
     print("Evaluating model...")
     y_pred = multi_model.predict(X_test)
     
+    per_target_accuracy = {}
     for i, col in enumerate(targets):
         print(f"--- Performance for {col} ---")
         print(classification_report(y_test.iloc[:, i], y_pred[:, i]))
-        
+        acc = accuracy_score(y_test.iloc[:, i], y_pred[:, i])
+        per_target_accuracy[col] = round(acc, 4)
+        print(f"Accuracy ({col}): {acc:.4f}")
+
+    overall_accuracy = round(sum(per_target_accuracy.values()) / len(per_target_accuracy), 4)
+    print(f"\nOverall mean accuracy: {overall_accuracy:.4f}")
+
+    # Save metrics.json
+    metrics = {
+        "model": "MultiOutputXGBoost",
+        "overall_accuracy": overall_accuracy,
+        "per_target_accuracy": per_target_accuracy,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+    metrics_path = os.path.join(os.path.dirname(__file__), 'metrics.json')
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Metrics saved to {metrics_path}")
+
     # Save the model
     print("Saving model to model.pkl...")
     joblib.dump(multi_model, 'model.pkl')

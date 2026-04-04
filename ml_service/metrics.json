@@ -1,0 +1,10 @@
+{
+  "model": "MultiOutputXGBoost",
+  "overall_accuracy": 0.9837,
+  "per_target_accuracy": {
+    "icu": 0.951,
+    "vent": 1.0,
+    "general": 1.0
+  },
+  "timestamp": "2026-04-04T03:53:52.763989Z"
+}

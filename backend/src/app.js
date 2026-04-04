@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth.routes')
 const citizenRoutes = require('./routes/citizen.routes')
 const ambulanceRoutes = require('./routes/ambulance.routes')
 const hospitalRoutes = require('./routes/hospital.routes')
+const mlRoutes = require('./routes/ml.routes')
 const cors = require('cors')
 
 const app = express()
@@ -25,5 +26,6 @@ app.use('/api/auth', authRoutes)
 app.use('/api/citizen', citizenRoutes)
 app.use('/api/ambulance', ambulanceRoutes)
 app.use('/api/hospital', hospitalRoutes)
+app.use('/api/ml', mlRoutes)
 
 module.exports = app
