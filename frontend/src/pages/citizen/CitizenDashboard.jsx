@@ -3,7 +3,21 @@ import { useAuth } from '../../context/AuthContext'
 import { Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import axios from 'axios'
-import { Camera, MapPin, Loader2, CheckCircle2, Siren, ShieldAlert, Award } from 'lucide-react'
+import { Camera, MapPin, Loader2, CheckCircle2, Siren, ShieldAlert, Award, Mic, Languages } from 'lucide-react'
+
+const speechLanguages = [
+  { value: 'auto', label: 'Auto detect' },
+  { value: 'en-IN', label: 'English' },
+  { value: 'hi-IN', label: 'Hindi' },
+  { value: 'mr-IN', label: 'Marathi' },
+  { value: 'bn-IN', label: 'Bengali' },
+  { value: 'ta-IN', label: 'Tamil' },
+  { value: 'te-IN', label: 'Telugu' },
+  { value: 'kn-IN', label: 'Kannada' },
+  { value: 'ml-IN', label: 'Malayalam' },
+  { value: 'gu-IN', label: 'Gujarati' },
+  { value: 'pa-IN', label: 'Punjabi' },
+]
 
 export default function CitizenDashboard() {
   const { user, loading: authLoading, API_URL, logout } = useAuth()
@@ -15,8 +29,13 @@ export default function CitizenDashboard() {
   const [points, setPoints] = useState(user?.totalRewardPoints || 0)
   const [reportHistory, setReportHistory] = useState([])
   const [rewardHistory, setRewardHistory] = useState([])
+  const [speechLanguage, setSpeechLanguage] = useState('auto')
+  const [voiceStatus, setVoiceStatus] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [isTranslatingVoice, setIsTranslatingVoice] = useState(false)
   
   const fileInputRef = useRef(null)
+  const recognitionRef = useRef(null)
 
   useEffect(() => {
     if (typeof user?.totalRewardPoints === 'number') {
@@ -44,6 +63,93 @@ export default function CitizenDashboard() {
 
     loadHistory()
   }, [API_URL])
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.()
+    }
+  }, [])
+
+  const handleVoiceCapture = async () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setError('Voice capture is not supported in this browser. Please type the details instead.')
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop?.()
+      return
+    }
+
+    setError('')
+    setSuccess('')
+    setVoiceStatus('Listening...')
+
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognition.lang = speechLanguage === 'auto' ? (navigator.language || 'en-IN') : speechLanguage
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+
+    recognition.onstart = () => {
+      setIsListening(true)
+    }
+
+    recognition.onerror = (event) => {
+      setIsListening(false)
+      setVoiceStatus('')
+      setError(event.error === 'not-allowed'
+        ? 'Microphone permission was denied. Please allow microphone access and try again.'
+        : 'Voice capture failed. Please try again or type the details manually.')
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognition.onresult = async (event) => {
+      const spokenText = event.results?.[0]?.[0]?.transcript?.trim()
+
+      if (!spokenText) {
+        setVoiceStatus('')
+        setError('No speech was detected. Please try again.')
+        return
+      }
+
+      try {
+        setIsTranslatingVoice(true)
+        if (speechLanguage.startsWith('en')) {
+          setDescription((prev) => prev ? `${prev}\n${spokenText}` : spokenText)
+          setVoiceStatus('Captured your spoken details in English.')
+          return
+        }
+
+        setVoiceStatus('Translating to English...')
+
+        const response = await axios.post(`${API_URL}/citizen/translate-description`, {
+          text: spokenText,
+          sourceLanguage: speechLanguage,
+        })
+
+        const translatedText = response.data?.translatedText?.trim() || spokenText
+        setDescription((prev) => prev ? `${prev}\n${translatedText}` : translatedText)
+        setVoiceStatus(`Translated from ${response.data?.detectedLanguage || 'your language'} to English.`)
+      } catch (err) {
+        const fallbackText = err.response?.data?.fallbackText?.trim() || spokenText
+        setDescription((prev) => prev ? `${prev}\n${fallbackText}` : fallbackText)
+        setVoiceStatus(err.response?.status === 429
+          ? 'Translation quota reached, so the captured transcript was added as-is.'
+          : 'Translation was unavailable, so the captured transcript was added as-is.')
+        setError(err.response?.data?.message || 'Voice translation failed, but the captured transcript was kept.')
+      } finally {
+        setIsTranslatingVoice(false)
+      }
+    }
+
+    recognition.start()
+  }
 
   const handleReport = async (aidType) => {
     if (!imageFile) {
@@ -181,12 +287,46 @@ export default function CitizenDashboard() {
                     onChange={handleImageChange}
                   />
 
-                  <textarea 
-                    placeholder="Add operational details (optional)..."
-                    className="w-full rounded-2xl border border-slate-200 p-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-white shadow-sm h-28 resize-none transition-all placeholder:text-slate-400"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                        <Languages className="h-4 w-4 text-blue-500" />
+                        Optional operational details
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <select
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500"
+                          value={speechLanguage}
+                          onChange={(event) => setSpeechLanguage(event.target.value)}
+                        >
+                          {speechLanguages.map((language) => (
+                            <option key={language.value} value={language.value}>
+                              {language.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleVoiceCapture}
+                          disabled={loading || isTranslatingVoice}
+                          className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${isListening ? 'bg-rose-600 text-white' : 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'} disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {isTranslatingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+                          {isListening ? 'Stop Recording' : isTranslatingVoice ? 'Translating...' : 'Speak Details'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea 
+                      placeholder="Add operational details (optional)..."
+                      className="h-28 w-full resize-none rounded-2xl border border-slate-200 p-4 text-sm font-medium transition-all placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    />
+                    {voiceStatus && (
+                      <p className="mt-3 text-xs font-semibold text-blue-600">{voiceStatus}</p>
+                    )}
+                  </div>
                </div>
 
                <div className="flex flex-col justify-center space-y-4">

@@ -29,6 +29,33 @@ async function runGeminiImageJsonPrompt(prompt, file) {
   return JSON.parse(responseText);
 }
 
+async function runGeminiTextJsonPrompt(prompt) {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+      maxOutputTokens: 400,
+    }
+  });
+
+  const result = await model.generateContent(prompt);
+  let responseText = result.response.text();
+  responseText = responseText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+  return JSON.parse(responseText);
+}
+
+function extractRetryDelaySeconds(error) {
+  const retryInfo = error?.errorDetails?.find(
+    (detail) => detail?.['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
+  );
+
+  const retryDelay = retryInfo?.retryDelay;
+  if (!retryDelay || typeof retryDelay !== 'string') return null;
+
+  const seconds = Number.parseInt(retryDelay.replace(/s$/i, ''), 10);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
 async function reportIncident(req, res) {
   try {
     const { aidType, lat, lng, description } = req.body;
@@ -171,4 +198,51 @@ async function getCitizenHistory(req, res) {
   }
 }
 
-module.exports = { reportIncident, getCitizenHistory };
+async function translateOperationalDetails(req, res) {
+  try {
+    const { text, sourceLanguage } = req.body;
+
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ message: 'Text is required for translation.' });
+    }
+
+    const translation = await runGeminiTextJsonPrompt(
+      [
+        "Translate the following emergency operational note into clear English.",
+        "The speaker may be using any Indian or other natural language and may describe injuries, location clues, pain, bleeding, crash details, or distress.",
+        "Preserve urgency and concrete medical details.",
+        "Do not add facts that were not spoken.",
+        "Return JSON with exactly these keys:",
+        "translatedText (string), detectedLanguage (string), notes (string).",
+        `Source language hint: ${sourceLanguage || 'unknown'}.`,
+        `Text: """${String(text).trim()}"""`,
+      ].join(" "),
+    );
+
+    return res.status(200).json({
+      translatedText: translation.translatedText || String(text).trim(),
+      detectedLanguage: translation.detectedLanguage || sourceLanguage || 'unknown',
+      notes: translation.notes || 'Translated to English.',
+    });
+  } catch (err) {
+    console.error('translateOperationalDetails error:', err);
+    const retryAfterSeconds = extractRetryDelaySeconds(err);
+
+    if (err?.status === 429) {
+      return res.status(429).json({
+        message: retryAfterSeconds
+          ? `Voice translation is temporarily rate-limited. Please retry in about ${retryAfterSeconds} seconds, or continue with the captured transcript.`
+          : 'Voice translation is temporarily rate-limited. Please retry shortly, or continue with the captured transcript.',
+        retryAfterSeconds,
+        fallbackText: String(text).trim(),
+      });
+    }
+
+    return res.status(502).json({
+      message: 'Voice translation is unavailable right now. Please continue with the captured transcript or type the details manually.',
+      fallbackText: String(text).trim(),
+    });
+  }
+}
+
+module.exports = { reportIncident, getCitizenHistory, translateOperationalDetails };
