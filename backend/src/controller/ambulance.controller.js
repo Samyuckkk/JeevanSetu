@@ -100,7 +100,7 @@ async function updateLocation(req, res) {
         location,
         lastLocationUpdate: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     )
 
     if (incidentId) {
@@ -109,7 +109,7 @@ async function updateLocation(req, res) {
         {
           ambulanceLocation: location,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
 
       if (incident) {
@@ -466,7 +466,7 @@ async function completeIncident(req, res) {
     const incident = await incidentModel.findByIdAndUpdate(
       incidentId,
       { status: 'completed', transportStatus: 'completed' },
-      { new: true }
+      { returnDocument: 'after' }
     )
 
     if (!incident) {

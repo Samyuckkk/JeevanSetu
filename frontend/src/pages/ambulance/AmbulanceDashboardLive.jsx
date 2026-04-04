@@ -102,6 +102,14 @@ export default function AmbulanceDashboardLive() {
     () => activeIncident?.ambulanceLocation || ambulanceLocation || activeIncident?.location || { lat: 18.5204, lng: 73.8567 },
     [activeIncident, ambulanceLocation],
   )
+  const rankedBestHospital = useMemo(
+    () => hospitalOptions.find((option) => option.isBestMatch) || bestHospital || null,
+    [bestHospital, hospitalOptions],
+  )
+  const alternativeHospitals = useMemo(
+    () => hospitalOptions.filter((option) => option.hospitalId !== rankedBestHospital?.hospitalId),
+    [hospitalOptions, rankedBestHospital],
+  )
 
   useEffect(() => {
     activeIncidentRef.current = activeIncident
@@ -482,41 +490,60 @@ export default function AmbulanceDashboardLive() {
                   </div>
                 </div>
 
-                {!selectedHospital ? (
-                  <form onSubmit={handleVitalsSubmit} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
-                      <Stethoscope className="h-5 w-5 text-rose-500" />
-                      Initial Vitals and Symptoms
-                    </h3>
+                {hospitalOptions.length === 0 ? (
+                  <div className="space-y-4">
+                    {selectedHospital && (
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-blue-700">
+                          <Radio className="h-5 w-5" />
+                          <span className="text-sm font-bold uppercase tracking-wide">Current destination</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-blue-950">{selectedHospital.name}</h3>
+                        <p className="mt-1 flex items-center gap-2 text-sm font-medium text-blue-700">
+                          <MapPin className="h-4 w-4" />
+                          {selectedHospital.location?.lat}, {selectedHospital.location?.lng}
+                        </p>
+                        <p className="mt-3 text-sm text-blue-800">
+                          This case already has a provisional hospital. Submit vitals to generate the best suitable hospital and all other ranked options.
+                        </p>
+                      </div>
+                    )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <label className="text-xs font-bold text-gray-500">
-                        Heart Rate
-                        <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.heartRate} onChange={(event) => setVitals({ ...vitals, heartRate: event.target.value })} />
-                      </label>
-                      <label className="text-xs font-bold text-gray-500">
-                        SpO2
-                        <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.spo2} onChange={(event) => setVitals({ ...vitals, spo2: event.target.value })} />
-                      </label>
-                      <label className="text-xs font-bold text-gray-500">
-                        Systolic BP
-                        <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.systolicBP} onChange={(event) => setVitals({ ...vitals, systolicBP: event.target.value })} />
-                      </label>
-                      <label className="text-xs font-bold text-gray-500">
-                        Diastolic BP
-                        <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.diastolicBP} onChange={(event) => setVitals({ ...vitals, diastolicBP: event.target.value })} />
-                      </label>
-                    </div>
+                    <form onSubmit={handleVitalsSubmit} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                      <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
+                        <Stethoscope className="h-5 w-5 text-rose-500" />
+                        Initial Vitals and Symptoms
+                      </h3>
 
-                    <label className="mt-4 block text-xs font-bold text-gray-500">
-                      Symptoms
-                      <textarea className="mt-1 h-28 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.symptoms} onChange={(event) => setVitals({ ...vitals, symptoms: event.target.value })} placeholder="chest pain, trauma, bleeding, stroke symptoms..." />
-                    </label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <label className="text-xs font-bold text-gray-500">
+                          Heart Rate
+                          <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.heartRate} onChange={(event) => setVitals({ ...vitals, heartRate: event.target.value })} />
+                        </label>
+                        <label className="text-xs font-bold text-gray-500">
+                          SpO2
+                          <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.spo2} onChange={(event) => setVitals({ ...vitals, spo2: event.target.value })} />
+                        </label>
+                        <label className="text-xs font-bold text-gray-500">
+                          Systolic BP
+                          <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.systolicBP} onChange={(event) => setVitals({ ...vitals, systolicBP: event.target.value })} />
+                        </label>
+                        <label className="text-xs font-bold text-gray-500">
+                          Diastolic BP
+                          <input type="number" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.diastolicBP} onChange={(event) => setVitals({ ...vitals, diastolicBP: event.target.value })} />
+                        </label>
+                      </div>
 
-                    <button disabled={loading} type="submit" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-3 font-bold text-white transition hover:bg-rose-700">
-                      Rank Hospitals <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </form>
+                      <label className="mt-4 block text-xs font-bold text-gray-500">
+                        Symptoms
+                        <textarea className="mt-1 h-28 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-900" value={vitals.symptoms} onChange={(event) => setVitals({ ...vitals, symptoms: event.target.value })} placeholder="chest pain, trauma, bleeding, stroke symptoms..." />
+                      </label>
+
+                      <button disabled={loading} type="submit" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-3 font-bold text-white transition hover:bg-rose-700">
+                        Rank Hospitals <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </form>
+                  </div>
                 ) : (
                   <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
                     <div className="mb-3 flex items-center gap-2 text-emerald-700">
@@ -579,35 +606,68 @@ export default function AmbulanceDashboardLive() {
                     <HeartPulse className="h-5 w-5 text-rose-500" />
                     <h3 className="text-lg font-bold text-gray-900">Hospital ranking</h3>
                   </div>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {hospitalOptions.map((hospital) => (
-                      <div key={hospital.hospitalId} className={`rounded-2xl border p-4 ${selectedHospital?.hospitalId === hospital.hospitalId ? 'border-emerald-400 bg-emerald-50' : 'border-gray-100 bg-gray-50'}`}>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div>
-                            <h4 className="text-lg font-bold text-gray-900">{hospital.name}</h4>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{hospital.distanceKm} km away</p>
-                          </div>
-                          {hospital.isBestMatch && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">Best match</span>}
+                  {rankedBestHospital && (
+                    <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Best Suitable Hospital</p>
+                          <h4 className="text-xl font-bold text-emerald-950">{rankedBestHospital.name}</h4>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            {rankedBestHospital.distanceKm} km away
+                          </p>
                         </div>
-                        <p className="text-sm font-medium text-gray-700">
-                          ICU {hospital.availableResources?.icuBeds || 0} | Vent {hospital.availableResources?.ventilators || 0} | General {hospital.availableResources?.generalBeds || 0}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-600">
-                          Specialists: {ensureStringList(hospital.availableResources?.specialists, ['general']).join(', ')}
-                        </p>
-                        <button
-                          onClick={() => handleSelectHospital(hospital.hospitalId)}
-                          disabled={loading}
-                          className={`mt-4 w-full rounded-xl px-4 py-3 font-bold transition ${selectedHospital?.hospitalId === hospital.hospitalId ? 'bg-emerald-700 text-white' : 'bg-white text-gray-900 ring-1 ring-gray-200 hover:bg-gray-100'}`}
-                        >
-                          {selectedHospital?.hospitalId === hospital.hospitalId ? 'Chosen Hospital' : 'Choose Hospital'}
-                        </button>
+                        <span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-bold text-emerald-800">Recommended</span>
                       </div>
-                    ))}
-                  </div>
-                  {bestHospital && (
+                      <p className="text-sm font-medium text-emerald-950">
+                        ICU {rankedBestHospital.availableResources?.icuBeds || 0} | Vent {rankedBestHospital.availableResources?.ventilators || 0} | General {rankedBestHospital.availableResources?.generalBeds || 0}
+                      </p>
+                      <p className="mt-1 text-sm text-emerald-900">
+                        Specialists: {ensureStringList(rankedBestHospital.availableResources?.specialists, ['general']).join(', ')}
+                      </p>
+                      <button
+                        onClick={() => handleSelectHospital(rankedBestHospital.hospitalId)}
+                        disabled={loading}
+                        className={`mt-4 w-full rounded-xl px-4 py-3 font-bold transition ${selectedHospital?.hospitalId === rankedBestHospital.hospitalId ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100'}`}
+                      >
+                        {selectedHospital?.hospitalId === rankedBestHospital.hospitalId ? 'Chosen Hospital' : 'Choose Best Suitable Hospital'}
+                      </button>
+                    </div>
+                  )}
+
+                  {alternativeHospitals.length > 0 && (
+                    <div>
+                      <h4 className="mb-3 text-base font-bold text-gray-900">All Other Options</h4>
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        {alternativeHospitals.map((hospital) => (
+                          <div key={hospital.hospitalId} className={`rounded-2xl border p-4 ${selectedHospital?.hospitalId === hospital.hospitalId ? 'border-emerald-400 bg-emerald-50' : 'border-gray-100 bg-gray-50'}`}>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <div>
+                                <h4 className="text-lg font-bold text-gray-900">{hospital.name}</h4>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{hospital.distanceKm} km away</p>
+                              </div>
+                            </div>
+                            <p className="text-sm font-medium text-gray-700">
+                              ICU {hospital.availableResources?.icuBeds || 0} | Vent {hospital.availableResources?.ventilators || 0} | General {hospital.availableResources?.generalBeds || 0}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              Specialists: {ensureStringList(hospital.availableResources?.specialists, ['general']).join(', ')}
+                            </p>
+                            <button
+                              onClick={() => handleSelectHospital(hospital.hospitalId)}
+                              disabled={loading}
+                              className={`mt-4 w-full rounded-xl px-4 py-3 font-bold transition ${selectedHospital?.hospitalId === hospital.hospitalId ? 'bg-emerald-700 text-white' : 'bg-white text-gray-900 ring-1 ring-gray-200 hover:bg-gray-100'}`}
+                            >
+                              {selectedHospital?.hospitalId === hospital.hospitalId ? 'Chosen Hospital' : 'Choose Hospital'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {rankedBestHospital && (
                     <p className="mt-3 text-sm font-semibold text-gray-600">
-                      Best match currently: <span className="text-emerald-700">{bestHospital.name}</span>. All hospitals are ranked from registered account inventory.
+                      Best match currently: <span className="text-emerald-700">{rankedBestHospital.name}</span>. All hospitals are ranked from registered account inventory.
                     </p>
                   )}
                 </div>

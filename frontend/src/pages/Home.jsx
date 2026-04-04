@@ -33,7 +33,7 @@ export default function Home() {
             <HeartPulse className="text-blue-600 w-12 h-12 pulse-ring" />
           </div>
           <h1 className="text-6xl font-extrabold text-white tracking-tight drop-shadow-md">
-            JeevanSetu
+            Sanjeevan
           </h1>
         </div>
         <p className="text-white/95 text-xl font-medium max-w-lg mx-auto leading-relaxed drop-shadow-sm">

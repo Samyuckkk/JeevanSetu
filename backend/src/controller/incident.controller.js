@@ -172,6 +172,49 @@ async function reportIncident(req, res) {
   }
 }
 
+async function reportDemoIncident(req, res) {
+  try {
+    const { aidType, lat, lng, description, image } = req.body;
+
+    if (!aidType) {
+      return res.status(400).json({ message: "Aid type is required" });
+    }
+
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ message: "Location is required" });
+    }
+
+    const incident = await incidentModel.create({
+      reportedBy: req.user.id,
+      image: image || "https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=1200&q=80",
+      aidType,
+      location: {
+        lat: Number(lat),
+        lng: Number(lng),
+      },
+      description: description || "Demo incident created from Postman.",
+      isHighSeverityTrauma: aidType === 'emergency',
+      traumaSeverityAssessment: "Demo incident created without AI validation.",
+    });
+
+    try {
+      getIO().to('ambulance').emit('incoming_incident', incident);
+    } catch (err) {
+      console.log('Socket mapping failed or no ambulances attached', err);
+    }
+
+    return res.status(201).json({
+      message: "Demo incident sent successfully",
+      incident,
+    });
+  } catch (err) {
+    console.error("REPORT DEMO INCIDENT ERROR:", err);
+    return res.status(500).json({
+      message: err.message,
+    });
+  }
+}
+
 async function getCitizenHistory(req, res) {
   try {
     const [citizen, reports] = await Promise.all([
@@ -245,4 +288,4 @@ async function translateOperationalDetails(req, res) {
   }
 }
 
-module.exports = { reportIncident, getCitizenHistory, translateOperationalDetails };
+module.exports = { reportIncident, reportDemoIncident, getCitizenHistory, translateOperationalDetails };

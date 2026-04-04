@@ -14,6 +14,7 @@ router.post(
     upload.single('image'),
     incidentController.reportIncident
 )
+router.post('/report-demo', authMiddleware, incidentController.reportDemoIncident)
 router.post('/translate-description', authMiddleware, incidentController.translateOperationalDetails)
 router.get('/history', authMiddleware, incidentController.getCitizenHistory)
 
