@@ -23,7 +23,6 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('userMeta', JSON.stringify(userData));
       })
       .catch(() => {
-        // Only wipe user if login() hasn't just set one
         if (!freshLoginRef.current) {
           setUser(null);
           localStorage.removeItem('userMeta');

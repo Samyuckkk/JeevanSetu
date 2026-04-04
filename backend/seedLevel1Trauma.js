@@ -11,7 +11,7 @@ mongoose.connect('mongodb://localhost:27017/hackathon')
         name: "Global Level 1 Trauma Center",
         email: "trauma1@hospital.com",
         password: pw,
-        location: { lat: 18.5204, lng: 73.8567 }, // Pune center
+        location: { lat: 18.5204, lng: 73.8567 },
         traumaLevel: 1,
         inventory: {
           icuBeds: 20,

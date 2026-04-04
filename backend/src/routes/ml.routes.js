@@ -6,8 +6,6 @@ const fs = require('fs')
 const router = express.Router()
 const ML_URL = 'http://127.0.0.1:8000'
 
-// POST /api/ml/test-ml
-// Forward vitals directly to ML service — use this in Postman to test
 router.post('/test-ml', async (req, res) => {
     const vitals = req.body
     console.log('[/test-ml] Input sent to ML:', vitals)
@@ -22,8 +20,6 @@ router.post('/test-ml', async (req, res) => {
     }
 })
 
-// GET /api/ml/metrics
-// Returns the metrics.json saved by train.py
 router.get('/metrics', (req, res) => {
     const metricsPath = path.join(__dirname, '../../../ml_service/metrics.json')
     if (!fs.existsSync(metricsPath)) {

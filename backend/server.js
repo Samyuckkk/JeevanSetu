@@ -9,7 +9,6 @@ const http = require('http');
 const server = http.createServer(app);
 const socket = require('./src/socket');
 
-// Initialize socket.io using the http server
 socket.init(server);
 
 connectDB()
