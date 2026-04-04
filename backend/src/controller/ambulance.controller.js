@@ -61,7 +61,7 @@ async function getActiveIncident(req, res) {
     const activeIncident = await incidentModel
       .findOne({
         assignedAmbulance: req.user.id,
-        status: { $ne: 'completed' },
+        status: 'assigned',
       })
       .sort({ updatedAt: -1 })
       .populate('assignedAmbulance', 'vehicleNumber type status location')
@@ -70,15 +70,15 @@ async function getActiveIncident(req, res) {
       .populate('hospitalOptions.hospital', 'name email location inventory status')
 
     const recentIncidents = await incidentModel
-      .find({
-        assignedAmbulance: req.user.id,
-      })
+      .find({ assignedAmbulance: req.user.id })
       .sort({ updatedAt: -1 })
       .limit(10)
       .populate('assignedAmbulance', 'vehicleNumber type status location')
       .populate('assignedHospital', 'name email location inventory status')
       .populate('selectedHospital', 'name email location inventory status')
       .populate('hospitalOptions.hospital', 'name email location inventory status')
+
+    console.log('getActiveIncident → sending:', activeIncident ? activeIncident._id : null)
 
     res.status(200).json({
       incident: activeIncident ? buildIncidentRealtimePayload(activeIncident) : null,
@@ -457,8 +457,39 @@ async function markArrival(req, res) {
   }
 }
 
+async function completeIncident(req, res) {
+  try {
+    const { incidentId } = req.body
+    console.log('completeIncident → completing:', incidentId)
+
+    const incident = await incidentModel.findByIdAndUpdate(
+      incidentId,
+      { status: 'completed', transportStatus: 'completed' },
+      { new: true }
+    )
+
+    if (!incident) {
+      return res.status(404).json({ message: 'Incident not found' })
+    }
+
+    console.log('completeIncident → updated status:', incident.status)
+
+    const populatedIncident = await populateIncident(incident._id)
+    emitHospitalCaseUpdate('patient_completed', populatedIncident.assignedHospital?._id, populatedIncident)
+
+    res.status(200).json({
+      message: 'Incident marked as completed',
+      incident: buildIncidentRealtimePayload(populatedIncident),
+    })
+  } catch (err) {
+    console.error('completeIncident error:', err.message)
+    res.status(500).json({ message: err.message })
+  }
+}
+
 module.exports = {
   acceptIncident,
+  completeIncident,
   getActiveIncident,
   getPendingIncidents,
   markArrival,

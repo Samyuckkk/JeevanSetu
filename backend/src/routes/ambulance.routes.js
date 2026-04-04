@@ -9,7 +9,8 @@ const {
     getActiveIncident,
     selectHospital,
     streamVitals,
-    markArrival
+    markArrival,
+    completeIncident
 } = require('../controller/ambulance.controller')
 const authMiddleware = require('../middlewares/auth.middleware')
 
@@ -21,5 +22,6 @@ router.post('/predict-allocation', authMiddleware, predictAllocation)
 router.post('/select-hospital', authMiddleware, selectHospital)
 router.post('/stream-vitals', authMiddleware, streamVitals)
 router.post('/mark-arrival', authMiddleware, markArrival)
+router.post('/complete-incident', authMiddleware, completeIncident)
 
 module.exports = router

@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 
-// Fix default marker icons broken by webpack/vite
+
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -43,11 +43,9 @@ export default function LeafletMap({ origin, destination, strokeColor = '#dc2626
     const map = mapRef.current
     if (!map) return
 
-    // Clear old markers
     markersRef.current.forEach((m) => m.remove())
     markersRef.current = []
 
-    // Clear old route
     if (routeLayerRef.current) {
       routeLayerRef.current.remove()
       routeLayerRef.current = null
@@ -66,7 +64,6 @@ export default function LeafletMap({ origin, destination, strokeColor = '#dc2626
     const destMarker = L.marker([destination.lat, destination.lng], { icon: makeLabel(destLabel, '#059669') }).addTo(map)
     markersRef.current.push(destMarker)
 
-    // Fetch route from OSRM (free, no key needed)
     const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
 
     fetch(url)
@@ -82,7 +79,6 @@ export default function LeafletMap({ origin, destination, strokeColor = '#dc2626
         map.fitBounds(bounds, { padding: [40, 40] })
       })
       .catch(() => {
-        // fallback: just draw straight line
         routeLayerRef.current = L.polyline(
           [[origin.lat, origin.lng], [destination.lat, destination.lng]],
           { color: strokeColor, weight: 4, dashArray: '8 6', opacity: 0.7 },
@@ -91,7 +87,6 @@ export default function LeafletMap({ origin, destination, strokeColor = '#dc2626
       })
   }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng, strokeColor])
 
-  // Invalidate size when container becomes visible
   useEffect(() => {
     const t = setTimeout(() => mapRef.current?.invalidateSize(), 200)
     return () => clearTimeout(t)

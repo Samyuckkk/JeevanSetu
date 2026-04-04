@@ -1,36 +1,43 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 axios.defaults.withCredentials = true;
-const API_URL = 'http://localhost:3000/api'; 
+const API_URL = 'http://localhost:3000/api';
 
 const AuthContext = createContext(null);
 
+function getCached() {
+  try { return JSON.parse(localStorage.getItem('userMeta')) } catch { return null }
+}
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // { id, role, ...details }
+  const [user, setUser] = useState(getCached);
   const [loading, setLoading] = useState(true);
+  const freshLoginRef = useRef(false);
 
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/auth/me`);
+    axios.get(`${API_URL}/auth/me`)
+      .then(res => {
         const userData = res.data.user;
         setUser(userData);
         localStorage.setItem('userMeta', JSON.stringify(userData));
-      } catch {
-        setUser(null);
-        localStorage.removeItem('userMeta');
-      } finally {
-        setLoading(false);
-      }
-    };
-    restoreSession();
+      })
+      .catch(() => {
+        // Only wipe user if login() hasn't just set one
+        if (!freshLoginRef.current) {
+          setUser(null);
+          localStorage.removeItem('userMeta');
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (role, data) => {
     const res = await axios.post(`${API_URL}/auth/${role}/login`, data);
     const userData = { ...res.data[role], role };
+    freshLoginRef.current = true;
     setUser(userData);
+    setLoading(false);
     localStorage.setItem('userMeta', JSON.stringify(userData));
     return res.data;
   };
@@ -38,16 +45,17 @@ export const AuthProvider = ({ children }) => {
   const register = async (role, data) => {
     const res = await axios.post(`${API_URL}/auth/${role}/register`, data);
     const userData = { ...res.data[role], role };
+    freshLoginRef.current = true;
     setUser(userData);
+    setLoading(false);
     localStorage.setItem('userMeta', JSON.stringify(userData));
     return res.data;
   };
 
   const logout = async () => {
     if (!user) return;
-    try {
-      await axios.post(`${API_URL}/auth/${user.role}/logout`);
-    } catch(e) {}
+    freshLoginRef.current = false;
+    try { await axios.post(`${API_URL}/auth/${user.role}/logout`); } catch {}
     setUser(null);
     localStorage.removeItem('userMeta');
   };

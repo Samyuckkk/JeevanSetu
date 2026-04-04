@@ -7,8 +7,7 @@ export default function AuthLayout({ children, title, subtitle, imageNode, bgCla
   return (
     <div className={`min-h-screen w-full flex ${bgClass} relative overflow-hidden`}>
       <div className="container mx-auto flex w-full max-w-7xl relative z-10 p-4 md:p-8">
-        
-        {/* Left Side: The Form */}
+
         <div className="w-full lg:w-1/2 flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
@@ -34,7 +33,6 @@ export default function AuthLayout({ children, title, subtitle, imageNode, bgCla
           </motion.div>
         </div>
 
-        {/* Right Side: Visual/Graphics */}
         <div className="hidden lg:flex w-1/2 items-center justify-center p-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -43,19 +41,16 @@ export default function AuthLayout({ children, title, subtitle, imageNode, bgCla
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.8, ease: [0.25, 0.8, 0.25, 1] }}
-              className="w-full h-full max-h-[700px] bg-slate-900 rounded-[2.5rem] relative overflow-hidden flex flex-col items-center justify-center text-white text-center p-12 shadow-2xl"
+              className="flex flex-col items-center justify-center text-white text-center p-12"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-emerald-500/10 to-slate-900 pointer-events-none" />
-              
-              <div className="z-10 bg-white/5 p-8 rounded-full backdrop-blur-md border border-white/10 mb-10 shadow-inner">
+              <div className="mb-10">
                 {imageNode}
               </div>
-              
-              <h3 className="z-10 text-3xl font-bold mb-4 tracking-tight text-white/90">Precision & Care</h3>
-              <p className="z-10 text-slate-400 font-medium text-lg leading-relaxed max-w-md">
+
+              <h3 className="text-3xl font-bold mb-4 tracking-tight text-white/90">Precision & Care</h3>
+              <p className="text-white/60 font-medium text-lg leading-relaxed max-w-md">
                 Securely access the platform. Maintain operational readiness and track critical data instantly.
               </p>
-
             </motion.div>
           </AnimatePresence>
         </div>

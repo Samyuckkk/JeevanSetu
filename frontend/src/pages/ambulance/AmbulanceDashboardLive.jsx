@@ -101,6 +101,7 @@ export default function AmbulanceDashboardLive() {
   }, [ambulanceLocation])
 
   useEffect(() => {
+    if (!user) return
     const hydrate = async () => {
       try {
         const [pendingRes, activeRes] = await Promise.all([
@@ -129,7 +130,7 @@ export default function AmbulanceDashboardLive() {
     }
 
     hydrate()
-  }, [API_URL])
+  }, [API_URL, user?.id, user?._id])
 
   useEffect(() => {
     if (!navigator.geolocation) return undefined
@@ -184,6 +185,7 @@ export default function AmbulanceDashboardLive() {
     })
 
     socket.on('ambulance_case_update', ({ incident, rerouted, reason }) => {
+      if (incident.status === 'completed') return
       setActiveIncident(incident)
       setHospitalOptions(incident.hospitalOptions || [])
       setRecentIncidents((prev) => [
@@ -229,6 +231,7 @@ export default function AmbulanceDashboardLive() {
         })
 
         setActiveIncident(response.data.incident)
+        if (response.data.incident?.status === 'completed') return
         const nextSelectedHospital = normalizeHospital(
           response.data.selectedHospital || response.data.incident.assignedHospital,
           response.data.incident.hospitalOptions || [],
@@ -321,21 +324,46 @@ export default function AmbulanceDashboardLive() {
     }
   }
 
-  const resetMission = () => {
-    setActiveIncident(null)
-    setVitals(initialVitals)
-    setHospitalOptions([])
-    setBestHospital(null)
-    setSelectedHospital(null)
-    setRouteAlert('')
-    setStreaming(false)
+  const resetMission = async () => {
+    if (!activeIncident) {
+      setActiveIncident(null)
+      setVitals(initialVitals)
+      setHospitalOptions([])
+      setBestHospital(null)
+      setSelectedHospital(null)
+      setRouteAlert('')
+      setStreaming(false)
+      return
+    }
+    try {
+      setLoading(true)
+      await axios.post(`${API_URL}/ambulance/complete-incident`, {
+        incidentId: activeIncident._id,
+      })
+      setActiveIncident(null)
+      setVitals(initialVitals)
+      setHospitalOptions([])
+      setBestHospital(null)
+      setSelectedHospital(null)
+      setRouteAlert('')
+      setStreaming(false)
+    } catch (err) {
+      console.error('Failed to complete incident on backend', err)
+      alert('Failed to clear mission. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (authLoading) {
-    return <div className="min-h-screen bg-slate-50 p-6" />
+  if (authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-rose-500 border-t-transparent" />
+      </div>
+    )
   }
 
-  if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" />
+  if (!user || user.role !== 'ambulance') return <Navigate to="/ambulance/login" replace />
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-6 pb-20">
@@ -516,7 +544,7 @@ export default function AmbulanceDashboardLive() {
                       <button onClick={handleMarkArrival} disabled={loading} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white transition hover:bg-emerald-800">
                         Mark Arrival
                       </button>
-                      <button onClick={resetMission} className="flex-1 rounded-xl bg-white px-4 py-3 font-bold text-emerald-800 ring-1 ring-emerald-200 transition hover:bg-emerald-100">
+                      <button onClick={resetMission} disabled={loading} className="flex-1 rounded-xl bg-white px-4 py-3 font-bold text-emerald-800 ring-1 ring-emerald-200 transition hover:bg-emerald-100 disabled:opacity-50">
                         Clear Mission
                       </button>
                     </div>

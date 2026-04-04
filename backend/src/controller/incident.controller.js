@@ -55,8 +55,9 @@ async function reportIncident(req, res) {
         }
       };
 
-      const result = await model.generateContent([prompt, imagePart]);
-      const aiContent = JSON.parse(result.response.text());
+      let responseText = result.response.text();
+      responseText = responseText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+      const aiContent = JSON.parse(responseText);
       
       isHighSeverityTrauma = aiContent.isHighSeverity === true;
       traumaSeverityAssessment = aiContent.assessment || "Analysis complete.";
@@ -92,7 +93,6 @@ async function reportIncident(req, res) {
 
     await user.save();
 
-    // EMIT real-time notification to all active ambulances
     try {
       getIO().to('ambulance').emit('incoming_incident', incident);
     } catch (err) {

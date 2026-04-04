@@ -1,3 +1,4 @@
+const axios = require('axios')
 const hospitalModel = require('../models/hospital.model')
 const incidentModel = require('../models/incident.model')
 
@@ -13,6 +14,48 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2)
 
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
+
+async function getOsrmRoutingData(originCoords, hospitals) {
+  if (!hospitals || hospitals.length === 0) return [];
+  
+  const coords = [`${originCoords.lng},${originCoords.lat}`];
+  hospitals.forEach(h => {
+    coords.push(`${h.location.lng},${h.location.lat}`);
+  });
+  
+  const coordsString = coords.join(';');
+  const url = `http://router.project-osrm.org/table/v1/driving/${coordsString}?sources=0&annotations=distance,duration`;
+  
+  try {
+    const response = await axios.get(url);
+    const data = response.data;
+    
+    if (data.code !== 'Ok' || !data.distances || !data.durations) {
+      throw new Error("Invalid OSRM Response");
+    }
+    
+    const distances = data.distances[0]; 
+    const durations = data.durations[0];
+    
+    return hospitals.map((h, i) => {
+      const distMeters = distances[i + 1] || 0;
+      const durationSeconds = durations[i + 1] || 0;
+
+      return {
+        hospitalId: String(h._id || h.hospital),
+        distanceKm: distMeters / 1000,
+        etaMins: Math.ceil(durationSeconds / 60)
+      };
+    });
+  } catch (error) {
+    console.warn("OSRM Table Route failed, falling back to Haversine", error.message);
+    return hospitals.map(h => ({
+      hospitalId: String(h._id || h.hospital),
+      distanceKm: getDistanceFromLatLonInKm(originCoords.lat, originCoords.lng, h.location.lat, h.location.lng),
+      etaMins: Math.ceil(getDistanceFromLatLonInKm(originCoords.lat, originCoords.lng, h.location.lat, h.location.lng) * 2) 
+    }));
+  }
 }
 
 function normalizeSpecialists(list = []) {
@@ -83,14 +126,23 @@ function buildFallbackPrediction(vitals = {}) {
   }
 }
 
-function buildHospitalOption(hospital, incidentLocation, requirements = {}) {
+function buildHospitalOption(hospital, incidentLocation, requirements = {}, routingInfo = null) {
   const inventory = hospital.inventory || {}
-  const distanceKm = getDistanceFromLatLonInKm(
-    incidentLocation.lat,
-    incidentLocation.lng,
-    hospital.location.lat,
-    hospital.location.lng,
-  )
+  
+  let distanceKm = 0;
+  let etaMins = 0;
+  if (routingInfo) {
+    distanceKm = routingInfo.distanceKm;
+    etaMins = routingInfo.etaMins;
+  } else {
+    distanceKm = getDistanceFromLatLonInKm(
+      incidentLocation.lat,
+      incidentLocation.lng,
+      hospital.location.lat,
+      hospital.location.lng,
+    );
+    etaMins = Math.ceil(distanceKm * 2);
+  }
 
   const hospitalSpecialists = normalizeSpecialists(inventory.specialists)
   const requiredSpecialists = normalizeSpecialists(requirements.specialists)
@@ -163,10 +215,15 @@ async function getEffectiveHospitals(hospitals) {
 
 async function rankHospitalsForIncident(incident, hospitals) {
   const effectiveHospitals = await getEffectiveHospitals(hospitals);
-  const requirements = buildRequirementSummary(incident.mlPrediction)
+  const requirements = buildRequirementSummary(incident.mlPrediction);
+  
+  const routingData = await getOsrmRoutingData(incident.location, effectiveHospitals);
+  const routingMap = {};
+  routingData.forEach(r => { routingMap[r.hospitalId] = r; });
+
   const ranked = effectiveHospitals
     .filter((hospital) => hospital.status !== 'offline')
-    .map((hospital) => buildHospitalOption(hospital, incident.location, requirements))
+    .map((hospital) => buildHospitalOption(hospital, incident.location, requirements, routingMap[String(hospital._id)]))
     .sort((a, b) => {
       if (b.capabilityScore !== a.capabilityScore) {
         return b.capabilityScore - a.capabilityScore
@@ -174,6 +231,10 @@ async function rankHospitalsForIncident(incident, hospitals) {
 
       if (b.matchesAllRequirements !== a.matchesAllRequirements) {
         return Number(b.matchesAllRequirements) - Number(a.matchesAllRequirements)
+      }
+
+      if (a.etaMins !== b.etaMins) {
+        return a.etaMins - b.etaMins
       }
 
       return a.distanceKm - b.distanceKm
@@ -203,15 +264,21 @@ function canHospitalStabilize(hospitalLike, severityLevel = 'stable') {
 async function findClosestStabilizationHospital(incident, currentHospitalId, severityLevel = 'critical') {
   const hospitals = await hospitalModel.find({ status: 'active' })
   const effectiveHospitals = await getEffectiveHospitals(hospitals);
+  
+  const origin = incident.ambulanceLocation || incident.location;
+  const routingData = await getOsrmRoutingData(origin, effectiveHospitals);
+  const routingMap = {};
+  routingData.forEach(r => { routingMap[r.hospitalId] = r; });
+
   const candidates = effectiveHospitals
-    .map((hospital) => buildHospitalOption(hospital, incident.ambulanceLocation || incident.location, {
+    .map((hospital) => buildHospitalOption(hospital, origin, {
       icuBeds: 0,
       ventilators: 0,
       generalBeds: 1,
       specialists: ['general'],
-    }))
+    }, routingMap[String(hospital._id)]))
     .filter((option) => canHospitalStabilize(option, severityLevel))
-    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .sort((a, b) => a.etaMins - b.etaMins || a.distanceKm - b.distanceKm)
 
   const currentHospitalIdString = currentHospitalId ? String(currentHospitalId) : null
   const alternative = candidates.find((candidate) => String(candidate.hospital) !== currentHospitalIdString)
@@ -226,6 +293,7 @@ function serializeHospitalOption(option) {
     status: option.status || option.hospital?.status,
     location: option.location || option.hospital?.location,
     distanceKm: option.distanceKm,
+    etaMins: option.etaMins,
     capabilityScore: option.capabilityScore,
     matchesAllRequirements: option.matchesAllRequirements,
     isBestMatch: option.isBestMatch,
